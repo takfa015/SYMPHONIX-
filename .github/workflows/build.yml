@@ -22,8 +22,16 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Creer les fichiers requis (.env et keystore)
+        run: |
+          if [ -f ".env.example" ]; then
+            cp .env.example .env
+          fi
+          touch local.properties
+          keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+
       - name: Build Debug APK
-        run: gradle assembleDebug --stacktrace
+        run: gradle assembleDebug --no-daemon --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -31,4 +39,3 @@ jobs:
           name: app-debug
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 7
-          
