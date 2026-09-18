@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -49,6 +50,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
@@ -116,8 +118,8 @@ fun DashboardScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            Spacer(modifier = Modifier.height(8.dp))
-            // Symphonix Brand Banner & Session Header
+            Spacer(modifier = Modifier.height(6.dp))
+            // Streamlined Session Info Strip
             WaterDropCard(
                 accentGlow = SymphonixBlue,
                 containerColor = Color(0x99FFFFFF)
@@ -125,118 +127,41 @@ fun DashboardScreen(
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Brand Fox Icon
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(Color.White)
-                                .border(1.2.dp, SymphonixBlue.copy(alpha = 0.35f), RoundedCornerShape(14.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Image(
-                                painter = painterResource(id = R.drawable.ic_symphonix_fox),
-                                contentDescription = "Symphonix Mascot",
-                                modifier = Modifier
-                                    .size(42.dp)
-                                    .clip(RoundedCornerShape(12.dp)),
-                                contentScale = ContentScale.Crop
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(12.dp))
-
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = session.establishmentName.ifBlank { "SYMPHONIX" },
-                                    style = MaterialTheme.typography.titleMedium.copy(
-                                        fontWeight = FontWeight.Black,
-                                        letterSpacing = 0.5.sp
-                                    ),
-                                    color = SymphonixDeepBlue
-                                )
-                            }
-                            Text(
-                                text = session.establishmentSubTitle.ifBlank { "Maîtrisez. Optimisez. Évoluez." },
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontSize = 11.5.sp,
-                                    fontWeight = FontWeight.Medium
-                                ),
-                                color = SymphonixBlue
-                            )
-
-                            Spacer(modifier = Modifier.height(6.dp))
-
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // Reference Pill
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(SymphonixLightBlue)
-                                        .border(1.dp, SymphonixBlue.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
-                                        .padding(horizontal = 8.dp, vertical = 3.dp)
-                                ) {
-                                    Text(
-                                        text = session.reference,
-                                        fontSize = 10.5.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = SymphonixDeepBlue
-                                    )
-                                }
-
-                                // Status Pill
-                                val isClosed = session.isClosed
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(if (isClosed) GlassEmeraldGreenBg else SymphonixLightBlue)
-                                        .border(
-                                            1.dp,
-                                            if (isClosed) GlassEmeraldGreen.copy(alpha = 0.4f) else SymphonixBlue.copy(alpha = 0.4f),
-                                            RoundedCornerShape(12.dp)
-                                        )
-                                        .padding(horizontal = 8.dp, vertical = 3.dp)
-                                ) {
-                                    Text(
-                                        text = if (isClosed) "Clôturée (${session.closingTime ?: ""})" else "En cours (Ouverte)",
-                                        fontSize = 10.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isClosed) GlassEmeraldGreen else SymphonixBlue
-                                    )
-                                }
-                            }
-                        }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = session.establishmentName.ifBlank { "SYMPHONIX" },
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.3.sp
+                            ),
+                            color = SymphonixDeepBlue
+                        )
+                        Text(
+                            text = session.establishmentSubTitle.ifBlank { "Session ${session.reference}" },
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
+                            color = SymphonixBlue
+                        )
                     }
 
-                    // Direct PDF Button
-                    Button(
-                        onClick = onExportPdf,
-                        colors = ButtonDefaults.buttonColors(containerColor = SymphonixBlue),
-                        shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier.padding(start = 8.dp)
+                    val isClosed = session.isClosed
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (isClosed) GlassEmeraldGreenBg else SymphonixLightBlue)
+                            .border(
+                                1.dp,
+                                if (isClosed) GlassEmeraldGreen.copy(alpha = 0.4f) else SymphonixBlue.copy(alpha = 0.4f),
+                                RoundedCornerShape(12.dp)
+                            )
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.PictureAsPdf,
-                            contentDescription = "PDF",
-                            tint = GlassPureWhite,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "PDF",
+                            text = if (isClosed) "Clôturée (${session.closingTime ?: ""})" else "En cours (Ouverte)",
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = GlassPureWhite,
-                            fontSize = 12.sp
+                            color = if (isClosed) GlassEmeraldGreen else SymphonixBlue
                         )
                     }
                 }
@@ -387,21 +312,24 @@ fun DashboardScreen(
                     onClick = onOpenReplenishDialog,
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = SymphonixLightBlue),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
                     border = androidx.compose.foundation.BorderStroke(1.dp, SymphonixBlue.copy(alpha = 0.4f))
                 ) {
                     Icon(
                         Icons.Default.AddCircle,
                         contentDescription = null,
                         tint = SymphonixBlue,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(16.dp)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = "+ Alimenter",
                         color = SymphonixDeepBlue,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 12.5.sp
+                        fontSize = 11.5.sp,
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
 
@@ -410,21 +338,24 @@ fun DashboardScreen(
                     onClick = onOpenDisburseDialog,
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = GlassCoralRedBg),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
                     border = androidx.compose.foundation.BorderStroke(1.dp, GlassCoralRed.copy(alpha = 0.4f))
                 ) {
                     Icon(
                         Icons.Default.RemoveCircle,
                         contentDescription = null,
                         tint = GlassCoralRed,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(16.dp)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = "- Décaisser",
                         color = GlassCoralRed,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 12.5.sp
+                        fontSize = 11.5.sp,
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
 
@@ -435,7 +366,8 @@ fun DashboardScreen(
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (session.isClosed) GlassEmeraldGreenBg else Color(0x33CBD5E1)
                     ),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
                     border = androidx.compose.foundation.BorderStroke(
                         1.dp,
                         if (session.isClosed) GlassEmeraldGreen.copy(alpha = 0.4f) else Color(0x4094A3B8)
@@ -445,14 +377,16 @@ fun DashboardScreen(
                         Icons.Default.Lock,
                         contentDescription = null,
                         tint = if (session.isClosed) GlassEmeraldGreen else GlassTextPrimary,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(16.dp)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = if (session.isClosed) "Clôturé" else "Pointer",
                         color = if (session.isClosed) GlassEmeraldGreen else GlassTextPrimary,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 12.5.sp
+                        fontSize = 11.5.sp,
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
             }
@@ -530,7 +464,12 @@ fun DashboardScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                Row(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(end = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
                                     Box(
                                         modifier = Modifier
                                             .size(24.dp)
@@ -546,16 +485,20 @@ fun DashboardScreen(
                                         )
                                     }
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Column {
+                                    Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = item.designation,
                                             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                            color = GlassTextPrimary
+                                            color = GlassTextPrimary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                         Text(
                                             text = "${item.time} • ${item.parentCategory}",
                                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                            color = GlassTextMuted
+                                            color = GlassTextMuted,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                     }
                                 }
@@ -563,7 +506,9 @@ fun DashboardScreen(
                                 Text(
                                     text = "-${CashPdfGenerator.formatAmount(item.amount, currency)}",
                                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = GlassCoralRed
+                                    color = GlassCoralRed,
+                                    maxLines = 1,
+                                    softWrap = false
                                 )
                             }
                         }

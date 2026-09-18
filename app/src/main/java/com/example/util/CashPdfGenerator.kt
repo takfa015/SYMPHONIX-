@@ -2,6 +2,8 @@ package com.example.util
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -9,6 +11,7 @@ import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import androidx.core.content.FileProvider
+import com.example.R
 import com.example.data.model.SessionWithDetails
 import java.io.File
 import java.io.FileOutputStream
@@ -16,14 +19,23 @@ import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 
+/**
+ * High-precision A4 PDF generator conforming to the official SYMPHONIX Brand Guide
+ * and the daily cash recap voucher specification.
+ *
+ * Enhanced with:
+ * - Proper letter spacing & sans-serif font weights avoiding cramped text
+ * - Clean text measurement and dynamic column balancing
+ * - Sharp brand visuals & watermark
+ */
 object CashPdfGenerator {
 
-    private val numberFormat: DecimalFormat by lazy {
+    private val decimalFormat: DecimalFormat by lazy {
         val symbols = DecimalFormatSymbols(Locale.FRENCH).apply {
             groupingSeparator = ' '
             decimalSeparator = ','
         }
-        DecimalFormat("#,##0", symbols)
+        DecimalFormat("#,##0.00", symbols)
     }
 
     private val percentFormat: DecimalFormat by lazy {
@@ -34,113 +46,151 @@ object CashPdfGenerator {
     }
 
     fun formatAmount(amount: Double, currency: String = "DA"): String {
-        return "${numberFormat.format(amount)} $currency"
+        return "${decimalFormat.format(amount)} $currency"
     }
 
     fun formatPercent(percent: Double): String {
         return "${percentFormat.format(percent)} %"
     }
 
-    fun generatePdfFile(context: Context, sessionDetails: SessionWithDetails): File {
-        val session = sessionDetails.session
-        val fileName = "Recap_Caisse_${session.reference}.pdf"
-        val cacheDir = context.cacheDir
-        val file = File(cacheDir, fileName)
-
+    /**
+     * Generates an official SYMPHONIX A4 PDF voucher in cache directory and returns the File.
+     */
+    fun generatePdfFile(context: Context, details: SessionWithDetails): File {
         val pdfDocument = PdfDocument()
-        // Standard A4 at 72 DPI is 595 x 842 points
+
+        // Standard A4 dimensions in PostScript points: 595 x 842 pt
         val pageWidth = 595
         val pageHeight = 842
         val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, 1).create()
         val page = pdfDocument.startPage(pageInfo)
         val canvas = page.canvas
 
-        drawDocument(canvas, sessionDetails, pageWidth, pageHeight)
+        drawDocument(context, canvas, details, pageWidth, pageHeight)
 
         pdfDocument.finishPage(page)
 
-        FileOutputStream(file).use { out ->
+        val outputDir = File(context.cacheDir, "pdf_reports").apply { mkdirs() }
+        val filename = "SYMPHONIX_Recap_Caisse_${details.session.reference}.pdf"
+        val outputFile = File(outputDir, filename)
+
+        FileOutputStream(outputFile).use { out ->
             pdfDocument.writeTo(out)
         }
         pdfDocument.close()
 
-        return file
+        return outputFile
     }
 
-    fun sharePdf(context: Context, file: File, title: String) {
+    fun sharePdf(context: Context, file: File, title: String = "Partager la Fiche de Caisse") {
         val uri = FileProvider.getUriForFile(
             context,
             "${context.packageName}.fileprovider",
             file
         )
-
-        val intent = Intent(Intent.ACTION_SEND).apply {
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "application/pdf"
             putExtra(Intent.EXTRA_STREAM, uri)
             putExtra(Intent.EXTRA_SUBJECT, title)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        context.startActivity(Intent.createChooser(intent, "Partager le Récapitulatif de Caisse"))
+        val chooser = Intent.createChooser(shareIntent, title).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(chooser)
+    }
+
+    private fun createPaint(
+        color: Int = Color.BLACK,
+        textSize: Float = 8f,
+        isBold: Boolean = false,
+        isItalic: Boolean = false,
+        letterSpacing: Float = 0.02f
+    ): Paint {
+        return Paint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG).apply {
+            this.color = color
+            this.textSize = textSize
+            val style = when {
+                isBold && isItalic -> Typeface.BOLD_ITALIC
+                isBold -> Typeface.BOLD
+                isItalic -> Typeface.ITALIC
+                else -> Typeface.NORMAL
+            }
+            this.typeface = Typeface.create(Typeface.SANS_SERIF, style)
+            this.letterSpacing = letterSpacing
+        }
     }
 
     private fun drawDocument(
+        context: Context,
         canvas: Canvas,
         details: SessionWithDetails,
         pageWidth: Int,
         pageHeight: Int
     ) {
         val session = details.session
-        val leftMargin = 30f
-        val rightMargin = pageWidth - 30f
+        val leftMargin = 32f
+        val rightMargin = pageWidth - 32f
         val contentWidth = rightMargin - leftMargin
 
+        // 0. Background canvas (Crisp Pure White)
         val bgPaint = Paint().apply {
             color = Color.WHITE
             style = Paint.Style.FILL
         }
         canvas.drawRect(0f, 0f, pageWidth.toFloat(), pageHeight.toFloat(), bgPaint)
 
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        var y = 42f
 
-        var y = 40f
-
-        // 1. Header Title & Subtitle with Symphonix brand badge
-        paint.color = Color.rgb(20, 107, 255) // Symphonix Blue
-        paint.textSize = 8.5f
-        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        // 1. Header Title & Brand Tag
+        val brandPaint = createPaint(
+            color = Color.rgb(20, 107, 255), // Symphonix Blue
+            textSize = 8.5f,
+            isBold = true,
+            letterSpacing = 0.06f
+        )
         val brandTag = "SYMPHONIX  |  " + (if (session.establishmentName.isNotBlank()) session.establishmentName else "CAISSE").uppercase()
-        canvas.drawText(brandTag, leftMargin, y - 10f, paint)
+        canvas.drawText(brandTag, leftMargin, y - 11f, brandPaint)
 
-        paint.color = Color.rgb(11, 46, 115) // Symphonix Deep Blue
-        paint.textSize = 14f
-        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        canvas.drawText("FICHE DE RÉCAPITULATIF DE CAISSE", leftMargin, y + 4f, paint)
+        val titlePaint = createPaint(
+            color = Color.rgb(11, 46, 115), // Symphonix Deep Blue
+            textSize = 14f,
+            isBold = true,
+            letterSpacing = 0.03f
+        )
+        canvas.drawText("FICHE DE RÉCAPITULATIF DE CAISSE", leftMargin, y + 4f, titlePaint)
 
         // Date pill badge on top right
         val dateText = "Date : ${session.dateText}"
-        paint.textSize = 8.5f
-        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        val dateWidth = paint.measureText(dateText)
-        val datePillRect = RectF(rightMargin - dateWidth - 14f, y - 12f, rightMargin, y + 3f)
+        val dateMeasurePaint = createPaint(
+            color = Color.rgb(22, 101, 52),
+            textSize = 8.5f,
+            isBold = true,
+            letterSpacing = 0.02f
+        )
+        val dateWidth = dateMeasurePaint.measureText(dateText)
+        val datePillRect = RectF(rightMargin - dateWidth - 16f, y - 13f, rightMargin, y + 3f)
         val pillBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.rgb(220, 252, 231) // light mint green
             style = Paint.Style.FILL
         }
         canvas.drawRoundRect(datePillRect, 4f, 4f, pillBgPaint)
-        paint.color = Color.rgb(22, 101, 52) // deep green
-        canvas.drawText(dateText, rightMargin - dateWidth - 7f, y - 1f, paint)
+        canvas.drawText(dateText, rightMargin - dateWidth - 8f, y - 1f, dateMeasurePaint)
 
-        y += 13f
+        y += 14f
         // Subtitle
-        paint.color = Color.rgb(100, 116, 139)
-        paint.textSize = 8.5f
-        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-        canvas.drawText("Journal chronologique des décaissements et rapprochement du fond de roulement", leftMargin, y, paint)
+        val subPaint = createPaint(
+            color = Color.rgb(100, 116, 139),
+            textSize = 8.2f,
+            isBold = false,
+            letterSpacing = 0.015f
+        )
+        canvas.drawText("Journal chronologique des décaissements et rapprochement du fond de roulement", leftMargin, y, subPaint)
 
         // Document Reference
         val refText = "Réf. Document : ${session.reference}"
-        val refWidth = paint.measureText(refText)
-        canvas.drawText(refText, rightMargin - refWidth, y, paint)
+        val refWidth = subPaint.measureText(refText)
+        canvas.drawText(refText, rightMargin - refWidth, y, subPaint)
 
         y += 16f
 
@@ -160,11 +210,7 @@ object CashPdfGenerator {
             titleColor = Color.rgb(71, 85, 105),
             amount = formatAmount(details.totalAvailableFund, session.currency),
             amountColor = Color.rgb(15, 23, 42),
-            sub = if (details.replenishments.isNotEmpty()) {
-                "${details.replenishments.size} apports (+${formatAmount(details.totalReplenishments, session.currency)})"
-            } else {
-                "Dotation (${session.initialFundTime})"
-            },
+            sub = "Dotation de départ : ${formatAmount(session.initialFund, session.currency)}",
             bgColor = Color.rgb(248, 250, 252),
             borderColor = Color.rgb(226, 232, 240)
         )
@@ -312,25 +358,17 @@ object CashPdfGenerator {
         canvas.drawRoundRect(rect, 4f, 4f, bgPaint)
         canvas.drawRoundRect(rect, 4f, 4f, borderPaint)
 
-        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-
         // Title
-        textPaint.color = titleColor
-        textPaint.textSize = 6.8f
-        textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        canvas.drawText(title, x + 7f, y + 11f, textPaint)
+        val tPaint = createPaint(titleColor, 6.8f, isBold = true, letterSpacing = 0.03f)
+        canvas.drawText(title, x + 7f, y + 11f, tPaint)
 
         // Amount
-        textPaint.color = amountColor
-        textPaint.textSize = 10.5f
-        textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        canvas.drawText(amount, x + 7f, y + 25f, textPaint)
+        val aPaint = createPaint(amountColor, 10.2f, isBold = true, letterSpacing = 0.02f)
+        canvas.drawText(amount, x + 7f, y + 25f, aPaint)
 
         // Subtitle
-        textPaint.color = Color.rgb(100, 116, 139)
-        textPaint.textSize = 6.2f
-        textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-        canvas.drawText(sub, x + 7f, y + 37f, textPaint)
+        val sPaint = createPaint(Color.rgb(100, 116, 139), 6.2f, isBold = false, letterSpacing = 0.01f)
+        canvas.drawText(sub, x + 7f, y + 37f, sPaint)
     }
 
     private fun drawReplenishmentsTable(
@@ -347,20 +385,17 @@ object CashPdfGenerator {
         // Title bar
         val titleBarHeight = 16f
         val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.rgb(37, 99, 235) // Deep Blue
+            color = Color.rgb(20, 107, 255) // Symphonix Blue
             style = Paint.Style.FILL
         }
         canvas.drawRect(leftMargin, y, rightMargin, y + titleBarHeight, bgPaint)
 
-        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-        textPaint.color = Color.WHITE
-        textPaint.textSize = 7.5f
-        textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        canvas.drawText("Journal des Alimentations & Apports de Caisse en cours de journée", leftMargin + 8f, y + 11f, textPaint)
+        val tPaint = createPaint(Color.WHITE, 7.5f, isBold = true, letterSpacing = 0.03f)
+        canvas.drawText("Journal des Alimentations & Apports de Caisse en cours de journée", leftMargin + 8f, y + 11f, tPaint)
 
         val countText = "${details.replenishments.size} apport(s) constaté(s)"
-        val countW = textPaint.measureText(countText)
-        canvas.drawText(countText, rightMargin - countW - 8f, y + 11f, textPaint)
+        val countW = tPaint.measureText(countText)
+        canvas.drawText(countText, rightMargin - countW - 8f, y + 11f, tPaint)
 
         y += titleBarHeight
 
@@ -377,16 +412,13 @@ object CashPdfGenerator {
         }
         canvas.drawRect(leftMargin, y, rightMargin, y + 14f, headerPaint)
 
-        textPaint.color = Color.rgb(30, 64, 175)
-        textPaint.textSize = 6.8f
-        textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-
-        canvas.drawText("N°", colN, y + 10f, textPaint)
-        canvas.drawText("Heure", colHeure, y + 10f, textPaint)
-        canvas.drawText("Motif / Justification", colMotif, y + 10f, textPaint)
-        canvas.drawText("Provenance / Emplacement source", colSource, y + 10f, textPaint)
+        val colHeadPaint = createPaint(Color.rgb(30, 64, 175), 6.8f, isBold = true, letterSpacing = 0.02f)
+        canvas.drawText("N°", colN, y + 10f, colHeadPaint)
+        canvas.drawText("Heure", colHeure, y + 10f, colHeadPaint)
+        canvas.drawText("Motif / Justification", colMotif, y + 10f, colHeadPaint)
+        canvas.drawText("Provenance / Emplacement source", colSource, y + 10f, colHeadPaint)
         val mLabel = "Montant (${session.currency})"
-        canvas.drawText(mLabel, colMontant - textPaint.measureText(mLabel), y + 10f, textPaint)
+        canvas.drawText(mLabel, colMontant - colHeadPaint.measureText(mLabel), y + 10f, colHeadPaint)
 
         y += 14f
 
@@ -398,6 +430,9 @@ object CashPdfGenerator {
             style = Paint.Style.STROKE
         }
 
+        val rowTextPaint = createPaint(Color.rgb(30, 41, 59), 7f, isBold = false, letterSpacing = 0.015f)
+        val rowAmtPaint = createPaint(Color.rgb(30, 41, 59), 7f, isBold = true, letterSpacing = 0.02f)
+
         details.replenishments.forEachIndexed { index, item ->
             if (index % 2 == 1) {
                 val zebraPaint = Paint().apply {
@@ -407,18 +442,13 @@ object CashPdfGenerator {
                 canvas.drawRect(leftMargin, y, rightMargin, y + rowHeight, zebraPaint)
             }
 
-            textPaint.color = Color.rgb(30, 41, 59)
-            textPaint.textSize = 7f
-            textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            canvas.drawText(String.format("%02d", item.orderNumber), colN, y + 10.5f, rowTextPaint)
+            canvas.drawText(item.time, colHeure, y + 10.5f, rowTextPaint)
+            canvas.drawText(item.reason, colMotif, y + 10.5f, rowTextPaint)
+            canvas.drawText(item.sourceLocation, colSource, y + 10.5f, rowTextPaint)
 
-            canvas.drawText(String.format("%02d", item.orderNumber), colN, y + 10.5f, textPaint)
-            canvas.drawText(item.time, colHeure, y + 10.5f, textPaint)
-            canvas.drawText(item.reason, colMotif, y + 10.5f, textPaint)
-            canvas.drawText(item.sourceLocation, colSource, y + 10.5f, textPaint)
-
-            textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             val amtText = formatAmount(item.amount, session.currency)
-            canvas.drawText(amtText, colMontant - textPaint.measureText(amtText), y + 10.5f, textPaint)
+            canvas.drawText(amtText, colMontant - rowAmtPaint.measureText(amtText), y + 10.5f, rowAmtPaint)
 
             canvas.drawLine(leftMargin, y + rowHeight, rightMargin, y + rowHeight, borderPaint)
             y += rowHeight
@@ -432,13 +462,11 @@ object CashPdfGenerator {
         }
         canvas.drawRect(leftMargin, y, rightMargin, y + totalBarHeight, totalBg)
 
-        textPaint.color = Color.rgb(30, 58, 138)
-        textPaint.textSize = 7.2f
-        textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        canvas.drawText("TOTAL DES ALIMENTATIONS ENTRÉES :", colMotif, y + 10f, textPaint)
+        val totalPaint = createPaint(Color.rgb(30, 58, 138), 7.2f, isBold = true, letterSpacing = 0.03f)
+        canvas.drawText("TOTAL DES ALIMENTATIONS ENTRÉES :", colMotif, y + 10f, totalPaint)
 
         val totalAmt = formatAmount(details.totalReplenishments, session.currency)
-        canvas.drawText(totalAmt, colMontant - textPaint.measureText(totalAmt), y + 10f, textPaint)
+        canvas.drawText(totalAmt, colMontant - totalPaint.measureText(totalAmt), y + 10f, totalPaint)
 
         y += totalBarHeight
         return y
@@ -455,32 +483,28 @@ object CashPdfGenerator {
         var y = startY
         val session = details.session
 
-        // Dark teal header matching document image
+        // Deep Teal/Blue header
         val headerHeight = 21f
         val headerBg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.rgb(0, 109, 91) // Deep Teal
+            color = Color.rgb(11, 46, 115) // Symphonix Deep Blue
             style = Paint.Style.FILL
         }
         canvas.drawRect(leftMargin, y, rightMargin, y + headerHeight, headerBg)
 
-        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-        textPaint.color = Color.WHITE
-        textPaint.textSize = 8.5f
-        textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        canvas.drawText("Journal Nominatif des Décaissements Effectués", leftMargin + 8f, y + 14f, textPaint)
+        val headPaint = createPaint(Color.WHITE, 8.5f, isBold = true, letterSpacing = 0.03f)
+        canvas.drawText("Journal Nominatif des Décaissements Effectués", leftMargin + 8f, y + 14f, headPaint)
 
-        textPaint.textSize = 7f
-        textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        val subHeadRightPaint = createPaint(Color.WHITE, 7f, isBold = false, letterSpacing = 0.02f)
         val subRight = "Devise : Dinar Algérien (${session.currency}) — Pointage chronologique"
-        val subRightW = textPaint.measureText(subRight)
-        canvas.drawText(subRight, rightMargin - subRightW - 8f, y + 14f, textPaint)
+        val subRightW = subHeadRightPaint.measureText(subRight)
+        canvas.drawText(subRight, rightMargin - subRightW - 8f, y + 14f, subHeadRightPaint)
 
         y += headerHeight
 
         // Sub-header columns
         val subHeaderHeight = 15f
         val subHeaderBg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.rgb(0, 77, 64) // Slightly darker teal
+            color = Color.rgb(20, 107, 255) // Symphonix Blue
             style = Paint.Style.FILL
         }
         canvas.drawRect(leftMargin, y, rightMargin, y + subHeaderHeight, subHeaderBg)
@@ -492,20 +516,18 @@ object CashPdfGenerator {
         val colMontant = rightMargin - 52f
         val colPart = rightMargin - 8f
 
-        textPaint.color = Color.WHITE
-        textPaint.textSize = 7f
-        textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        val colLabelPaint = createPaint(Color.WHITE, 7f, isBold = true, letterSpacing = 0.02f)
 
-        canvas.drawText("N°", colN, y + 10.5f, textPaint)
-        canvas.drawText("Heure", colHeure, y + 10.5f, textPaint)
-        canvas.drawText("Désignation / Bénéficiaire", colDesig, y + 10.5f, textPaint)
-        canvas.drawText("Catégorie", colCat, y + 10.5f, textPaint)
+        canvas.drawText("N°", colN, y + 10.5f, colLabelPaint)
+        canvas.drawText("Heure", colHeure, y + 10.5f, colLabelPaint)
+        canvas.drawText("Désignation / Bénéficiaire", colDesig, y + 10.5f, colLabelPaint)
+        canvas.drawText("Catégorie", colCat, y + 10.5f, colLabelPaint)
 
         val mLabel = "Montant (${session.currency})"
-        canvas.drawText(mLabel, colMontant - textPaint.measureText(mLabel), y + 10.5f, textPaint)
+        canvas.drawText(mLabel, colMontant - colLabelPaint.measureText(mLabel), y + 10.5f, colLabelPaint)
 
         val pLabel = "Part (%)"
-        canvas.drawText(pLabel, colPart - textPaint.measureText(pLabel), y + 10.5f, textPaint)
+        canvas.drawText(pLabel, colPart - colLabelPaint.measureText(pLabel), y + 10.5f, colLabelPaint)
 
         y += subHeaderHeight
 
@@ -518,6 +540,9 @@ object CashPdfGenerator {
         }
 
         val totalDecaisse = details.totalDisbursements
+        val textPaint = createPaint(Color.rgb(30, 41, 59), 7.5f, isBold = false, letterSpacing = 0.015f)
+        val amtPaint = createPaint(Color.rgb(15, 23, 42), 7.5f, isBold = true, letterSpacing = 0.02f)
+        val partPaint = createPaint(Color.rgb(71, 85, 105), 7.2f, isBold = false, letterSpacing = 0.01f)
 
         details.disbursements.forEachIndexed { index, item ->
             // Subtle alternating tint
@@ -529,20 +554,25 @@ object CashPdfGenerator {
                 canvas.drawRect(leftMargin, y, rightMargin, y + rowHeight, zebraPaint)
             }
 
-            textPaint.color = Color.rgb(30, 41, 59)
-            textPaint.textSize = 7.5f
-            textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-
             // N°
             canvas.drawText(String.format("%02d", item.orderNumber), colN, y + 11.5f, textPaint)
             // Heure
             canvas.drawText(item.time, colHeure, y + 11.5f, textPaint)
-            // Désignation
-            canvas.drawText(item.designation, colDesig, y + 11.5f, textPaint)
+
+            // Désignation (Ellipsize if necessary to prevent overlap with Catégorie)
+            val maxDesigWidth = (colCat - 6f) - colDesig
+            val safeDesig = ellipsizeText(item.designation, textPaint, maxDesigWidth)
+            canvas.drawText(safeDesig, colDesig, y + 11.5f, textPaint)
 
             // Catégorie Badge
             val catText = item.fullCategory
-            val catBadgeW = textPaint.measureText(catText) + 8f
+            val catBadgePaint = createPaint(
+                if (item.parentCategory.contains("Personnel", true)) Color.rgb(30, 64, 175) else Color.rgb(6, 95, 70),
+                6.8f,
+                isBold = true,
+                letterSpacing = 0.02f
+            )
+            val catBadgeW = catBadgePaint.measureText(catText) + 8f
             val catPill = RectF(colCat - 3f, y + 3f, colCat + catBadgeW, y + rowHeight - 3f)
             val catPillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = if (item.parentCategory.contains("Personnel", true)) {
@@ -553,57 +583,44 @@ object CashPdfGenerator {
                 style = Paint.Style.FILL
             }
             canvas.drawRoundRect(catPill, 3f, 3f, catPillPaint)
-            val catTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = if (item.parentCategory.contains("Personnel", true)) Color.rgb(30, 64, 175) else Color.rgb(6, 95, 70)
-                textSize = 6.8f
-                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            }
-            canvas.drawText(catText, colCat + 1f, y + 11.5f, catTextPaint)
+            canvas.drawText(catText, colCat + 1f, y + 11.5f, catBadgePaint)
 
             // Montant
-            textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            textPaint.color = Color.rgb(15, 23, 42)
             val amtStr = formatAmount(item.amount, session.currency)
-            canvas.drawText(amtStr, colMontant - textPaint.measureText(amtStr), y + 11.5f, textPaint)
+            canvas.drawText(amtStr, colMontant - amtPaint.measureText(amtStr), y + 11.5f, amtPaint)
 
             // Part %
             val part = if (totalDecaisse > 0) (item.amount / totalDecaisse) * 100.0 else 0.0
             val partStr = formatPercent(part)
-            textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-            textPaint.color = Color.rgb(71, 85, 105)
-            canvas.drawText(partStr, colPart - textPaint.measureText(partStr), y + 11.5f, textPaint)
+            canvas.drawText(partStr, colPart - partPaint.measureText(partStr), y + 11.5f, partPaint)
 
             // Line separator
             canvas.drawLine(leftMargin, y + rowHeight, rightMargin, y + rowHeight, borderPaint)
             y += rowHeight
         }
 
-        // Total Row matching document
+        // Total Row
         val totalRowHeight = 18f
         val totalRowBg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.rgb(240, 253, 250) // Mint 50
+            color = Color.rgb(240, 253, 250)
             style = Paint.Style.FILL
         }
         canvas.drawRect(leftMargin, y, rightMargin, y + totalRowHeight, totalRowBg)
 
-        textPaint.color = Color.rgb(15, 23, 42)
-        textPaint.textSize = 7.8f
-        textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-
+        val totLabelPaint = createPaint(Color.rgb(15, 23, 42), 7.8f, isBold = true, letterSpacing = 0.03f)
         val totalLabel = "TOTAL DES DÉCAISSEMENTS ENREGISTRÉS (${details.disbursements.size} OPÉRATIONS) :"
-        val totalLabelW = textPaint.measureText(totalLabel)
-        canvas.drawText(totalLabel, colCat - 30f, y + 12f, textPaint)
+        canvas.drawText(totalLabel, colCat - 36f, y + 12f, totLabelPaint)
 
-        textPaint.color = Color.rgb(180, 83, 9) // Orange brown matching sample
+        val totAmtPaint = createPaint(Color.rgb(180, 83, 9), 7.8f, isBold = true, letterSpacing = 0.02f)
         val totalAmtStr = formatAmount(totalDecaisse, session.currency)
-        canvas.drawText(totalAmtStr, colMontant - textPaint.measureText(totalAmtStr), y + 12f, textPaint)
+        canvas.drawText(totalAmtStr, colMontant - totAmtPaint.measureText(totalAmtStr), y + 12f, totAmtPaint)
 
-        textPaint.color = Color.rgb(15, 23, 42)
+        val totPartPaint = createPaint(Color.rgb(15, 23, 42), 7.5f, isBold = true, letterSpacing = 0.02f)
         val hundredPercent = "100,00 %"
-        canvas.drawText(hundredPercent, colPart - textPaint.measureText(hundredPercent), y + 12f, textPaint)
+        canvas.drawText(hundredPercent, colPart - totPartPaint.measureText(hundredPercent), y + 12f, totPartPaint)
 
         val doubleBorder = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.rgb(0, 109, 91)
+            color = Color.rgb(20, 107, 255)
             strokeWidth = 1.2f
             style = Paint.Style.STROKE
         }
@@ -611,6 +628,16 @@ object CashPdfGenerator {
 
         y += totalRowHeight
         return y
+    }
+
+    private fun ellipsizeText(text: String, paint: Paint, maxWidth: Float): String {
+        if (paint.measureText(text) <= maxWidth) return text
+        val ellipsis = "..."
+        var end = text.length
+        while (end > 0 && paint.measureText(text.substring(0, end) + ellipsis) > maxWidth) {
+            end--
+        }
+        return if (end > 0) text.substring(0, end) + ellipsis else ""
     }
 
     private fun drawLowerSection(
@@ -622,34 +649,30 @@ object CashPdfGenerator {
         startY: Float
     ) {
         val session = details.session
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
 
         // --- LEFT COLUMN: Ventilation by Category ---
         var yLeft = startY
-        paint.color = Color.rgb(15, 23, 42)
-        paint.textSize = 8.5f
-        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        canvas.drawText("Ventilation par Catégorie de Dépense", leftX, yLeft + 8f, paint)
+        val secTitlePaint = createPaint(Color.rgb(15, 23, 42), 8.5f, isBold = true, letterSpacing = 0.03f)
+        canvas.drawText("Ventilation par Catégorie de Dépense", leftX, yLeft + 8f, secTitlePaint)
 
-        // Green line accent
+        // Accent line
         val accentLinePaint = Paint().apply {
-            color = Color.rgb(0, 109, 91)
+            color = Color.rgb(20, 107, 255) // Symphonix Blue
             strokeWidth = 1.5f
         }
         canvas.drawLine(leftX, yLeft + 12f, leftX + width, yLeft + 12f, accentLinePaint)
 
         yLeft += 20f
 
-        val linePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        val catNamePaint = createPaint(Color.rgb(30, 41, 59), 7.5f, isBold = true, letterSpacing = 0.02f)
+        val catValPaint = createPaint(Color.rgb(30, 41, 59), 7.5f, isBold = true, letterSpacing = 0.02f)
+
         details.categoryBreakdowns.forEach { breakdown ->
-            linePaint.textSize = 7.5f
-            linePaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            linePaint.color = Color.rgb(30, 41, 59)
-            canvas.drawText(breakdown.name, leftX, yLeft + 5f, linePaint)
+            canvas.drawText(breakdown.name, leftX, yLeft + 5f, catNamePaint)
 
             val valText = "${formatAmount(breakdown.amount, session.currency)} (${formatPercent(breakdown.percentage)})"
-            val valW = linePaint.measureText(valText)
-            canvas.drawText(valText, leftX + width - valW, yLeft + 5f, linePaint)
+            val valW = catValPaint.measureText(valText)
+            canvas.drawText(valText, leftX + width - valW, yLeft + 5f, catValPaint)
 
             yLeft += 15f
         }
@@ -670,21 +693,16 @@ object CashPdfGenerator {
         canvas.drawRoundRect(obsRect, 4f, 4f, obsBg)
         canvas.drawRoundRect(obsRect, 4f, 4f, obsBorder)
 
-        val obsPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-        obsPaint.color = Color.rgb(22, 101, 52)
-        obsPaint.textSize = 7.5f
-        obsPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        val obsHeaderPaint = createPaint(Color.rgb(22, 101, 52), 7.5f, isBold = true, letterSpacing = 0.03f)
         val closeH = session.closingTime ?: "20h34"
-        canvas.drawText("POINTAGE PHYSIQUE DE CLÔTURE (${closeH.uppercase()})", leftX + 8f, yLeft + 12f, obsPaint)
+        canvas.drawText("POINTAGE PHYSIQUE DE CLÔTURE (${closeH.uppercase()})", leftX + 8f, yLeft + 12f, obsHeaderPaint)
 
         val espText = "ESPÈCES : ${formatAmount(details.countedCash, session.currency)}"
-        val espW = obsPaint.measureText(espText)
-        canvas.drawText(espText, leftX + width - espW - 8f, yLeft + 12f, obsPaint)
+        val espW = obsHeaderPaint.measureText(espText)
+        canvas.drawText(espText, leftX + width - espW - 8f, yLeft + 12f, obsHeaderPaint)
 
-        // Descriptive sentence
-        obsPaint.color = Color.rgb(51, 65, 85)
-        obsPaint.textSize = 6.8f
-        obsPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        // Descriptive sentence with clean spacing
+        val obsBodyPaint = createPaint(Color.rgb(51, 65, 85), 6.8f, isBold = false, letterSpacing = 0.015f)
 
         val line1 = "Le comptage physique à $closeH fait ressortir ${formatAmount(details.countedCash, session.currency)} en espèces, en"
         val line2 = if (details.isBalanced) {
@@ -694,21 +712,16 @@ object CashPdfGenerator {
         }
         val line3 = if (details.isBalanced) "Aucun écart de caisse constaté." else "Écart de pointage à régulariser en comptabilité."
 
-        canvas.drawText(line1, leftX + 8f, yLeft + 23f, obsPaint)
-        canvas.drawText(line2, leftX + 8f, yLeft + 32f, obsPaint)
-        canvas.drawText(line3, leftX + 8f, yLeft + 41f, obsPaint)
+        canvas.drawText(line1, leftX + 8f, yLeft + 23f, obsBodyPaint)
+        canvas.drawText(line2, leftX + 8f, yLeft + 32f, obsBodyPaint)
+        canvas.drawText(line3, leftX + 8f, yLeft + 41f, obsBodyPaint)
 
         // --- RIGHT COLUMN: Pointage & Rapprochement de Caisse Table ---
         var yRight = startY
-        paint.color = Color.rgb(15, 23, 42)
-        paint.textSize = 8.5f
-        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        canvas.drawText("Pointage & Rapprochement de Caisse", rightX, yRight + 8f, paint)
-
+        canvas.drawText("Pointage & Rapprochement de Caisse", rightX, yRight + 8f, secTitlePaint)
         canvas.drawLine(rightX, yRight + 12f, rightX + width, yRight + 12f, accentLinePaint)
         yRight += 20f
 
-        val rapPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         val rapRowHeight = 14f
 
         // 1. Fond initial
@@ -721,24 +734,35 @@ object CashPdfGenerator {
         )
         yRight += rapRowHeight
 
-        // 2. Alimentations (if any)
+        // 2. Replenishments if any
         if (details.replenishments.isNotEmpty()) {
             drawRapprochementRow(
                 canvas, rightX, yRight, width,
-                "(+) Alimentations / Rallonges (${details.replenishments.size} apports)",
-                "+ " + formatAmount(details.totalReplenishments, session.currency),
+                "(+) Apports & alimentations (${details.replenishments.size} entrées)",
+                formatAmount(details.totalReplenishments, session.currency),
                 isBold = false,
                 isNegative = false,
-                color = Color.rgb(37, 99, 235)
+                color = Color.rgb(20, 107, 255)
             )
             yRight += rapRowHeight
         }
 
-        // 3. Décaissements enregistrés
+        // 3. Fond Total disponible
         drawRapprochementRow(
             canvas, rightX, yRight, width,
-            "(-) Décaissements enregistrés (${details.disbursements.size} opérations)",
-            "- " + formatAmount(details.totalDisbursements, session.currency),
+            "(=) TOTAL LIQUIDITÉS DISPONIBLES",
+            formatAmount(details.totalAvailableFund, session.currency),
+            isBold = true,
+            isNegative = false,
+            color = Color.rgb(15, 23, 42)
+        )
+        yRight += rapRowHeight
+
+        // 4. Total décaissements
+        drawRapprochementRow(
+            canvas, rightX, yRight, width,
+            "(−) Total dépenses & décaissements",
+            formatAmount(details.totalDisbursements, session.currency),
             isBold = false,
             isNegative = true,
             color = Color.rgb(180, 83, 9)
@@ -746,45 +770,61 @@ object CashPdfGenerator {
         yRight += rapRowHeight
 
         // Divider
-        canvas.drawLine(rightX, yRight, rightX + width, yRight, Paint().apply {
+        val rowDivider = Paint().apply {
             color = Color.rgb(203, 213, 225)
-            strokeWidth = 0.8f
-        })
-        yRight += 2f
+            strokeWidth = 0.6f
+        }
+        canvas.drawLine(rightX, yRight + 2f, rightX + width, yRight + 2f, rowDivider)
+        yRight += 6f
 
-        // 4. Solde Théorique Calculé
+        // 5. Solde théorique
         drawRapprochementRow(
             canvas, rightX, yRight, width,
-            "(=) Solde Théorique Calculé",
+            "(=) SOLDE THÉORIQUE ATTENDU",
             formatAmount(details.theoreticalBalance, session.currency),
             isBold = true,
-            isNegative = false
+            isNegative = false,
+            color = Color.rgb(11, 46, 115)
         )
-        yRight += rapRowHeight + 4f
+        yRight += rapRowHeight
 
-        // 5. Espèces Physiques Constatées (highlighted green bar)
-        val espBox = RectF(rightX, yRight, rightX + width, yRight + 15f)
-        canvas.drawRoundRect(espBox, 2f, 2f, Paint().apply {
-            color = Color.rgb(220, 252, 231)
+        // 5b. Comptage physique
+        drawRapprochementRow(
+            canvas, rightX, yRight, width,
+            "(=) RESTE PHYSIQUE RÉEL (ESPÈCES)",
+            formatAmount(details.countedCash, session.currency),
+            isBold = true,
+            isNegative = false,
+            color = Color.rgb(22, 101, 52)
+        )
+        yRight += rapRowHeight
+
+        // Écart de caisse box
+        val ecartBoxRect = RectF(rightX, yRight + 2f, rightX + width, yRight + 18f)
+        val ecartBgPaint = Paint().apply {
+            color = if (details.isBalanced) Color.rgb(240, 253, 244) else Color.rgb(254, 242, 242)
             style = Paint.Style.FILL
-        })
-        rapPaint.color = Color.rgb(22, 101, 52)
-        rapPaint.textSize = 7.5f
-        rapPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        canvas.drawText("Espèces Physiques Constatées (${closeH}) :", rightX + 6f, yRight + 11f, rapPaint)
-        val espAmt = formatAmount(details.countedCash, session.currency)
-        val espAmtW = rapPaint.measureText(espAmt)
-        canvas.drawText(espAmt, rightX + width - espAmtW - 6f, yRight + 11f, rapPaint)
-
-        yRight += 19f
+        }
+        val ecartBorderPaint = Paint().apply {
+            color = if (details.isBalanced) Color.rgb(187, 247, 208) else Color.rgb(254, 202, 202)
+            strokeWidth = 0.8f
+            style = Paint.Style.STROKE
+        }
+        canvas.drawRoundRect(ecartBoxRect, 3f, 3f, ecartBgPaint)
+        canvas.drawRoundRect(ecartBoxRect, 3f, 3f, ecartBorderPaint)
 
         // 6. Écart de pointage
         val ecartLabel = if (details.isBalanced) "Écart de pointage (Concordance parfaite) :" else "Écart de pointage constaté :"
         val ecartValStr = if (details.isBalanced) "0 ${session.currency}" else formatAmount(details.discrepancy, session.currency)
-        rapPaint.color = if (details.isBalanced) Color.rgb(22, 101, 52) else Color.rgb(185, 28, 28)
-        canvas.drawText(ecartLabel, rightX + 6f, yRight + 10f, rapPaint)
-        val ecartValW = rapPaint.measureText(ecartValStr)
-        canvas.drawText(ecartValStr, rightX + width - ecartValW - 6f, yRight + 10f, rapPaint)
+        val rapEcartPaint = createPaint(
+            if (details.isBalanced) Color.rgb(22, 101, 52) else Color.rgb(185, 28, 28),
+            7.5f,
+            isBold = true,
+            letterSpacing = 0.02f
+        )
+        canvas.drawText(ecartLabel, rightX + 6f, yRight + 13f, rapEcartPaint)
+        val ecartValW = rapEcartPaint.measureText(ecartValStr)
+        canvas.drawText(ecartValStr, rightX + width - ecartValW - 6f, yRight + 13f, rapEcartPaint)
     }
 
     private fun drawRapprochementRow(
@@ -798,11 +838,7 @@ object CashPdfGenerator {
         isNegative: Boolean,
         color: Int = Color.rgb(30, 41, 59)
     ) {
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            this.color = color
-            textSize = 7.2f
-            typeface = if (isBold) Typeface.create(Typeface.DEFAULT, Typeface.BOLD) else Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-        }
+        val paint = createPaint(color, 7.2f, isBold = isBold, letterSpacing = 0.02f)
         canvas.drawText(label, x + 4f, y + 10f, paint)
         val valW = paint.measureText(value)
         canvas.drawText(value, x + width - valW - 4f, y + 10f, paint)
@@ -827,22 +863,16 @@ object CashPdfGenerator {
             style = Paint.Style.FILL
         }
 
-        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        val sigHeaderPaint = createPaint(Color.rgb(71, 85, 105), 6.8f, isBold = true, letterSpacing = 0.03f)
+        val sigSubPaint = createPaint(Color.rgb(148, 163, 184), 6.5f, isBold = false, isItalic = true, letterSpacing = 0.02f)
 
         // Box 1: ÉTABLI PAR (RESPONSABLE DE CAISSE)
         val box1 = RectF(leftMargin, startY, leftMargin + colWidth, startY + height)
         canvas.drawRect(box1, bgPaint)
         canvas.drawRect(box1, borderPaint)
 
-        textPaint.color = Color.rgb(71, 85, 105)
-        textPaint.textSize = 6.8f
-        textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        canvas.drawText("ÉTABLI PAR (${details.session.responsibleName.uppercase()}) :", leftMargin + 8f, startY + 12f, textPaint)
-
-        textPaint.color = Color.rgb(148, 163, 184)
-        textPaint.textSize = 6.5f
-        textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
-        canvas.drawText("Signature & Date (${details.session.dateText})", leftMargin + 8f, startY + 40f, textPaint)
+        canvas.drawText("ÉTABLI PAR (${details.session.responsibleName.uppercase()}) :", leftMargin + 8f, startY + 12f, sigHeaderPaint)
+        canvas.drawText("Signature & Date (${details.session.dateText})", leftMargin + 8f, startY + 40f, sigSubPaint)
 
         // Box 2: VÉRIFIÉ & VALIDÉ PAR (DIRECTION / GÉRANCE)
         val rightX = rightMargin - colWidth
@@ -850,15 +880,8 @@ object CashPdfGenerator {
         canvas.drawRect(box2, bgPaint)
         canvas.drawRect(box2, borderPaint)
 
-        textPaint.color = Color.rgb(71, 85, 105)
-        textPaint.textSize = 6.8f
-        textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        canvas.drawText("VÉRIFIÉ & VALIDÉ PAR (${details.session.managerName.uppercase()}) :", rightX + 8f, startY + 12f, textPaint)
-
-        textPaint.color = Color.rgb(148, 163, 184)
-        textPaint.textSize = 6.5f
-        textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
-        canvas.drawText("Signature & Cachet", rightX + 8f, startY + 40f, textPaint)
+        canvas.drawText("VÉRIFIÉ & VALIDÉ PAR (${details.session.managerName.uppercase()}) :", rightX + 8f, startY + 12f, sigHeaderPaint)
+        canvas.drawText("Signature & Cachet", rightX + 8f, startY + 40f, sigSubPaint)
     }
 
     private fun drawFooter(
@@ -868,24 +891,20 @@ object CashPdfGenerator {
         y: Float,
         rightMargin: Float
     ) {
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.rgb(148, 163, 184)
-            textSize = 6.5f
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-        }
+        val footerPaint = createPaint(Color.rgb(148, 163, 184), 6.5f, isBold = false, letterSpacing = 0.02f)
 
         val sep = " — "
         val left = "SYMPHONIX Caisse$sep${details.session.establishmentName}"
-        canvas.drawText(left, leftMargin, y, paint)
+        canvas.drawText(left, leftMargin, y, footerPaint)
 
         val center = "Arrêté du ${details.session.dateText}$sep${if (details.session.isClosed) "Clôture journalière" else "Session active"}"
-        val centerW = paint.measureText(center)
+        val centerW = footerPaint.measureText(center)
         val centerPos = (leftMargin + rightMargin) / 2f - centerW / 2f
-        canvas.drawText(center, centerPos, y, paint)
+        canvas.drawText(center, centerPos, y, footerPaint)
 
         val right = "Page 1 / 1"
-        val rightW = paint.measureText(right)
-        canvas.drawText(right, rightMargin - rightW, y, paint)
+        val rightW = footerPaint.measureText(right)
+        canvas.drawText(right, rightMargin - rightW, y, footerPaint)
     }
 
     private data class Tuple5<A, B, C, D, E>(

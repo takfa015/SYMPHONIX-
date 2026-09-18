@@ -161,11 +161,25 @@ fun ClotureScreen(
                         OutlinedButton(
                             onClick = onReopenSession,
                             shape = RoundedCornerShape(14.dp),
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = com.example.ui.theme.SymphonixDeepBlue
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(1.2.dp, com.example.ui.theme.SymphonixBlue.copy(alpha = 0.5f))
                         ) {
-                            Icon(Icons.Default.LockOpen, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Icon(
+                                Icons.Default.LockOpen,
+                                contentDescription = null,
+                                tint = com.example.ui.theme.SymphonixDeepBlue,
+                                modifier = Modifier.size(16.dp)
+                            )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Rouvrir", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "Rouvrir",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = com.example.ui.theme.SymphonixDeepBlue
+                            )
                         }
 
                         Button(
@@ -401,7 +415,7 @@ fun ClotureScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                         Text(
                             text = "Nouvelle Journée / Session",
                             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
@@ -417,7 +431,8 @@ fun ClotureScreen(
                     Button(
                         onClick = onOpenNewSessionDialog,
                         colors = ButtonDefaults.buttonColors(containerColor = GlassWaterBlue),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 8.dp)
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))

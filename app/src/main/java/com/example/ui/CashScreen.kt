@@ -2,8 +2,12 @@ package com.example.ui
 
 import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -21,6 +25,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -118,12 +123,14 @@ fun CashScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .windowInsetsPadding(WindowInsets.statusBars)
-                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    contentAlignment = Alignment.Center
                 ) {
                     val headerShape = RoundedCornerShape(22.dp)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .widthIn(max = 680.dp)
                             .shadow(
                                 elevation = 8.dp,
                                 shape = headerShape,
@@ -237,76 +244,97 @@ fun CashScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(top = innerPadding.calculateTopPadding())
+                    .padding(top = innerPadding.calculateTopPadding()),
+                contentAlignment = Alignment.TopCenter
             ) {
-                AnimatedContent(
-                    targetState = selectedTab,
-                    transitionSpec = { fadeIn() togetherWith fadeOut() },
-                    label = "tabTransition"
-                ) { targetTab ->
-                    when (targetTab) {
-                        CashTab.DASHBOARD -> {
-                            DashboardScreen(
-                                sessionDetails = currentSession,
-                                onNavigateTab = { selectedTab = it },
-                                onOpenReplenishDialog = { showAddReplenishmentDialog = true },
-                                onOpenDisburseDialog = { showAddDisbursementDialog = true },
-                                onOpenCloseDialog = { showCloseCashDialog = true },
-                                onExportPdf = { viewModel.exportAndSharePdf() }
-                            )
-                        }
-                        CashTab.ENCAISSEMENT -> {
-                            EncaissementScreen(
-                                sessionDetails = currentSession,
-                                onOpenAddDialog = { showAddReplenishmentDialog = true },
-                                onDeleteReplenishment = { id -> viewModel.deleteReplenishment(id) }
-                            )
-                        }
-                        CashTab.DECAISSEMENT -> {
-                            DecaissementScreen(
-                                sessionDetails = currentSession,
-                                onOpenAddDialog = { showAddDisbursementDialog = true },
-                                onDeleteDisbursement = { id -> viewModel.deleteDisbursement(id) }
-                            )
-                        }
-                        CashTab.HISTORIQUE -> {
-                            HistoriqueScreen(
-                                allSessions = allSessions,
-                                selectedSessionId = selectedSessionId ?: currentSession?.session?.id,
-                                onSelectSession = { id ->
-                                    viewModel.selectSession(id)
-                                    selectedTab = CashTab.DASHBOARD
-                                },
-                                onExportPdf = { sessionDetails ->
-                                    viewModel.exportAndSharePdfForSession(sessionDetails)
-                                },
-                                onDeleteSession = { id ->
-                                    viewModel.deleteSession(id)
-                                }
-                            )
-                        }
-                        CashTab.CLOTURE -> {
-                            ClotureScreen(
-                                sessionDetails = currentSession,
-                                onOpenCloseDialog = { showCloseCashDialog = true },
-                                onReopenSession = { viewModel.reopenSession() },
-                                onOpenNewSessionDialog = { showNewSessionDialog = true }
-                            )
-                        }
-                        CashTab.PARAMETRES -> {
-                            ParametresScreen(
-                                sessionDetails = currentSession,
-                                onSaveSettings = { establishmentName, establishmentSubTitle, responsibleName, managerName, currency, initialFund ->
-                                    viewModel.updateSettings(
-                                        establishmentName = establishmentName,
-                                        establishmentSubTitle = establishmentSubTitle,
-                                        responsibleName = responsibleName,
-                                        managerName = managerName,
-                                        currency = currency,
-                                        initialFund = initialFund
-                                    )
-                                }
-                            )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .widthIn(max = 680.dp)
+                ) {
+                    AnimatedContent(
+                        targetState = selectedTab,
+                        transitionSpec = {
+                            val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
+                            (slideInHorizontally(
+                                animationSpec = spring(dampingRatio = 0.82f, stiffness = 420f),
+                                initialOffsetX = { fullWidth -> direction * (fullWidth / 4) }
+                            ) + fadeIn(
+                                animationSpec = tween(durationMillis = 240)
+                            )) togetherWith (slideOutHorizontally(
+                                animationSpec = spring(dampingRatio = 0.82f, stiffness = 420f),
+                                targetOffsetX = { fullWidth -> -direction * (fullWidth / 4) }
+                            ) + fadeOut(
+                                animationSpec = tween(durationMillis = 180)
+                            ))
+                        },
+                        label = "tabTransition"
+                    ) { targetTab ->
+                        when (targetTab) {
+                            CashTab.DASHBOARD -> {
+                                DashboardScreen(
+                                    sessionDetails = currentSession,
+                                    onNavigateTab = { selectedTab = it },
+                                    onOpenReplenishDialog = { showAddReplenishmentDialog = true },
+                                    onOpenDisburseDialog = { showAddDisbursementDialog = true },
+                                    onOpenCloseDialog = { showCloseCashDialog = true },
+                                    onExportPdf = { viewModel.exportAndSharePdf() }
+                                )
+                            }
+                            CashTab.ENCAISSEMENT -> {
+                                EncaissementScreen(
+                                    sessionDetails = currentSession,
+                                    onOpenAddDialog = { showAddReplenishmentDialog = true },
+                                    onDeleteReplenishment = { id -> viewModel.deleteReplenishment(id) }
+                                )
+                            }
+                            CashTab.DECAISSEMENT -> {
+                                DecaissementScreen(
+                                    sessionDetails = currentSession,
+                                    onOpenAddDialog = { showAddDisbursementDialog = true },
+                                    onDeleteDisbursement = { id -> viewModel.deleteDisbursement(id) }
+                                )
+                            }
+                            CashTab.HISTORIQUE -> {
+                                HistoriqueScreen(
+                                    allSessions = allSessions,
+                                    selectedSessionId = selectedSessionId ?: currentSession?.session?.id,
+                                    onSelectSession = { id ->
+                                        viewModel.selectSession(id)
+                                        selectedTab = CashTab.DASHBOARD
+                                    },
+                                    onExportPdf = { sessionDetails ->
+                                        viewModel.exportAndSharePdfForSession(sessionDetails)
+                                    },
+                                    onDeleteSession = { id ->
+                                        viewModel.deleteSession(id)
+                                    }
+                                )
+                            }
+                            CashTab.CLOTURE -> {
+                                ClotureScreen(
+                                    sessionDetails = currentSession,
+                                    onOpenCloseDialog = { showCloseCashDialog = true },
+                                    onReopenSession = { viewModel.reopenSession() },
+                                    onOpenNewSessionDialog = { showNewSessionDialog = true }
+                                )
+                            }
+                            CashTab.PARAMETRES -> {
+                                ParametresScreen(
+                                    sessionDetails = currentSession,
+                                    onSaveSettings = { establishmentName, establishmentSubTitle, responsibleName, managerName, currency, initialFund ->
+                                        viewModel.updateSettings(
+                                            establishmentName = establishmentName,
+                                            establishmentSubTitle = establishmentSubTitle,
+                                            responsibleName = responsibleName,
+                                            managerName = managerName,
+                                            currency = currency,
+                                            initialFund = initialFund
+                                        )
+                                    },
+                                    onExportPdf = { viewModel.exportAndSharePdf() }
+                                )
+                            }
                         }
                     }
                 }
