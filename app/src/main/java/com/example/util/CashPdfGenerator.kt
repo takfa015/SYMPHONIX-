@@ -105,7 +105,7 @@ object CashPdfGenerator {
         textSize: Float = 8f,
         isBold: Boolean = false,
         isItalic: Boolean = false,
-        letterSpacing: Float = 0.02f
+        letterSpacing: Float = 0f
     ): Paint {
         return Paint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG).apply {
             this.color = color
@@ -117,7 +117,9 @@ object CashPdfGenerator {
                 else -> Typeface.NORMAL
             }
             this.typeface = Typeface.create(Typeface.SANS_SERIF, style)
-            this.letterSpacing = letterSpacing
+            // DO NOT set letterSpacing on Android PDF Canvas:
+            // Android's Skia PDF backend inserts artificial word-break tags/kerning spaces
+            // causing words to split in viewers like Samsung Notes (e.g. "compt age", "parfai te").
         }
     }
 

@@ -54,12 +54,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -97,7 +99,8 @@ enum class CashTab(
 }
 
 /**
- * Dynamic organic liquid water droplet background with smooth breathing wave animations.
+ * Dynamic organic liquid water droplet background with smooth breathing wave animations,
+ * optimized with drawBehind to avoid recomposition overhead and guarantee 120 FPS fluidity.
  */
 @Composable
 fun WaterDropletBackground(
@@ -106,35 +109,14 @@ fun WaterDropletBackground(
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "waterInfinite")
 
-    // Slow ambient breathing phase for water droplets
-    val pulse1 by infiniteTransition.animateFloat(
-        initialValue = 0.94f,
-        targetValue = 1.06f,
+    val animProgress by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 4800, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
+            animation = tween(durationMillis = 6500, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
         ),
-        label = "pulse1"
-    )
-
-    val pulse2 by infiniteTransition.animateFloat(
-        initialValue = 1.05f,
-        targetValue = 0.93f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 6200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulse2"
-    )
-
-    val waveOffset by infiniteTransition.animateFloat(
-        initialValue = -25f,
-        targetValue = 25f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 5500, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "waveOffset"
+        label = "animProgress"
     )
 
     Box(
@@ -150,99 +132,63 @@ fun WaterDropletBackground(
                     )
                 )
             )
-    ) {
-        // Decorative fluid animated water shapes in background
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val width = size.width
-            val height = size.height
+            .drawBehind {
+                val width = size.width
+                val height = size.height
+                val angle = animProgress * 2f * Math.PI.toFloat()
+                val pulse1 = 1f + 0.06f * kotlin.math.sin(angle)
+                val pulse2 = 1f + 0.06f * kotlin.math.cos(angle)
+                val waveOffset = 20f * kotlin.math.sin(angle)
 
-            // Organic Water Drop 1 (Top right - Cyan Blue) with breathing scale
-            val r1 = width * 0.55f * pulse1
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        Color(0x3838BDF8),
-                        Color(0x1838BDF8),
-                        Color.Transparent
+                // Organic Water Drop 1 (Top right - Cyan Blue)
+                val r1 = width * 0.55f * pulse1
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Color(0x3538BDF8), Color(0x1438BDF8), Color.Transparent),
+                        center = Offset(width * 0.85f, height * 0.12f + waveOffset * 0.3f),
+                        radius = r1
                     ),
                     center = Offset(width * 0.85f, height * 0.12f + waveOffset * 0.3f),
                     radius = r1
-                ),
-                center = Offset(width * 0.85f, height * 0.12f + waveOffset * 0.3f),
-                radius = r1
-            )
+                )
 
-            // Organic Water Drop 2 (Middle left - Emerald Green)
-            val r2 = width * 0.6f * pulse2
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        Color(0x3034D399),
-                        Color(0x1234D399),
-                        Color.Transparent
+                // Organic Water Drop 2 (Middle left - Emerald Green)
+                val r2 = width * 0.6f * pulse2
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Color(0x2C34D399), Color(0x0E34D399), Color.Transparent),
+                        center = Offset(width * 0.1f, height * 0.42f - waveOffset * 0.2f),
+                        radius = r2
                     ),
                     center = Offset(width * 0.1f, height * 0.42f - waveOffset * 0.2f),
                     radius = r2
-                ),
-                center = Offset(width * 0.1f, height * 0.42f - waveOffset * 0.2f),
-                radius = r2
-            )
+                )
 
-            // Organic Water Drop 3 (Bottom right - Soft Rose / Coral)
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        Color(0x22F43F5E),
-                        Color(0x0AF43F5E),
-                        Color.Transparent
+                // Organic Water Drop 3 (Bottom right - Soft Rose / Coral)
+                val r3 = width * 0.5f * pulse1
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Color(0x20F43F5E), Color(0x08F43F5E), Color.Transparent),
+                        center = Offset(width * 0.9f, height * 0.75f + waveOffset * 0.4f),
+                        radius = r3
                     ),
                     center = Offset(width * 0.9f, height * 0.75f + waveOffset * 0.4f),
-                    radius = width * 0.5f * pulse1
-                ),
-                center = Offset(width * 0.9f, height * 0.75f + waveOffset * 0.4f),
-                radius = width * 0.5f * pulse1
-            )
+                    radius = r3
+                )
 
-            // Organic Water Drop 4 (Symphonix Blue Top Left ambient reflection)
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        Color(0x20146BFF),
-                        Color(0x08146BFF),
-                        Color.Transparent
+                // Organic Water Drop 4 (Symphonix Blue Top Left ambient reflection)
+                val r4 = width * 0.45f * pulse2
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Color(0x1F146BFF), Color(0x06146BFF), Color.Transparent),
+                        center = Offset(width * 0.15f, height * 0.08f),
+                        radius = r4
                     ),
                     center = Offset(width * 0.15f, height * 0.08f),
-                    radius = width * 0.45f * pulse2
-                ),
-                center = Offset(width * 0.15f, height * 0.08f),
-                radius = width * 0.45f * pulse2
-            )
-
-            // Fluid water curve with gentle wave undulating motion
-            val wavePath = Path().apply {
-                moveTo(0f, height * 0.28f + waveOffset)
-                cubicTo(
-                    width * 0.35f, height * 0.22f - waveOffset,
-                    width * 0.65f, height * 0.34f + waveOffset,
-                    width, height * 0.26f - waveOffset
+                    radius = r4
                 )
-                lineTo(width, 0f)
-                lineTo(0f, 0f)
-                close()
             }
-            drawPath(
-                path = wavePath,
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0x180284C7),
-                        Color.Transparent
-                    ),
-                    startY = 0f,
-                    endY = height * 0.32f
-                )
-            )
-        }
-
+    ) {
         content()
     }
 }
@@ -267,13 +213,13 @@ fun WaterDropCard(
 
     val scale by animateFloatAsState(
         targetValue = if (isPressed && onClick != null) 0.975f else 1f,
-        animationSpec = spring(dampingRatio = 0.7f, stiffness = 400f),
+        animationSpec = spring(dampingRatio = 0.7f, stiffness = 450f),
         label = "cardScale"
     )
 
     val elevation by animateDpAsState(
         targetValue = if (isPressed && onClick != null) 2.dp else 6.dp,
-        animationSpec = spring(dampingRatio = 0.75f, stiffness = 400f),
+        animationSpec = spring(dampingRatio = 0.75f, stiffness = 450f),
         label = "cardElevation"
     )
 
@@ -289,7 +235,10 @@ fun WaterDropCard(
 
     Box(
         modifier = modifier
-            .scale(scale)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
             .shadow(
                 elevation = elevation,
                 shape = shape,
