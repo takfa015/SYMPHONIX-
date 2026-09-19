@@ -679,45 +679,6 @@ object CashPdfGenerator {
             yLeft += 15f
         }
 
-        // Green Observation box: POINTAGE PHYSIQUE DE CLÔTURE
-        yLeft += 6f
-        val boxHeight = 46f
-        val obsRect = RectF(leftX, yLeft, leftX + width, yLeft + boxHeight)
-        val obsBg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.rgb(240, 253, 244)
-            style = Paint.Style.FILL
-        }
-        val obsBorder = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.rgb(187, 247, 208)
-            strokeWidth = 0.8f
-            style = Paint.Style.STROKE
-        }
-        canvas.drawRoundRect(obsRect, 4f, 4f, obsBg)
-        canvas.drawRoundRect(obsRect, 4f, 4f, obsBorder)
-
-        val obsHeaderPaint = createPaint(Color.rgb(22, 101, 52), 7.5f, isBold = true, letterSpacing = 0.03f)
-        val closeH = session.closingTime ?: "20h34"
-        canvas.drawText("POINTAGE PHYSIQUE DE CLÔTURE (${closeH.uppercase()})", leftX + 8f, yLeft + 12f, obsHeaderPaint)
-
-        val espText = "ESPÈCES : ${formatAmount(details.countedCash, session.currency)}"
-        val espW = obsHeaderPaint.measureText(espText)
-        canvas.drawText(espText, leftX + width - espW - 8f, yLeft + 12f, obsHeaderPaint)
-
-        // Descriptive sentence with clean spacing
-        val obsBodyPaint = createPaint(Color.rgb(51, 65, 85), 6.8f, isBold = false, letterSpacing = 0.015f)
-
-        val line1 = "Le comptage physique à $closeH fait ressortir ${formatAmount(details.countedCash, session.currency)} en espèces, en"
-        val line2 = if (details.isBalanced) {
-            "parfaite concordance avec le solde théorique calculé (${formatAmount(details.totalAvailableFund, session.currency)} − ${formatAmount(details.totalDisbursements, session.currency)})."
-        } else {
-            "écart de ${formatAmount(details.discrepancy, session.currency)} par rapport au solde théorique calculé."
-        }
-        val line3 = if (details.isBalanced) "Aucun écart de caisse constaté." else "Écart de pointage à régulariser en comptabilité."
-
-        canvas.drawText(line1, leftX + 8f, yLeft + 23f, obsBodyPaint)
-        canvas.drawText(line2, leftX + 8f, yLeft + 32f, obsBodyPaint)
-        canvas.drawText(line3, leftX + 8f, yLeft + 41f, obsBodyPaint)
-
         // --- RIGHT COLUMN: Pointage & Rapprochement de Caisse Table ---
         var yRight = startY
         canvas.drawText("Pointage & Rapprochement de Caisse", rightX, yRight + 8f, secTitlePaint)

@@ -250,18 +250,17 @@ private fun ReplenishmentDropletItem(
         accentGlow = GlassWaterBlue,
         containerColor = Color(0x8CFFFFFF)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+        Column(
+            modifier = Modifier.fillMaxWidth()
         ) {
+            // Top Row: [Arrow icon badge] + [Reason] + [Amount & Delete button]
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(32.dp)
                         .clip(CircleShape)
                         .background(GlassWaterBlueBg),
                     contentAlignment = Alignment.Center
@@ -270,56 +269,21 @@ private fun ReplenishmentDropletItem(
                         Icons.Default.ArrowDownward,
                         contentDescription = null,
                         tint = GlassWaterBlue,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(10.dp))
 
-                Column {
-                    Text(
-                        text = item.reason,
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                        color = GlassTextPrimary
-                    )
+                Text(
+                    text = item.reason,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                    color = GlassTextPrimary,
+                    modifier = Modifier.weight(1f)
+                )
 
-                    Spacer(modifier = Modifier.height(3.dp))
+                Spacer(modifier = Modifier.width(8.dp))
 
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Time badge
-                        Text(
-                            text = item.time,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = GlassTextMuted
-                        )
-
-                        Text(text = "•", fontSize = 11.sp, color = GlassTextMuted)
-
-                        // Source Location Pill
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Default.Place,
-                                contentDescription = null,
-                                tint = GlassWaterBlue,
-                                modifier = Modifier.size(12.dp)
-                            )
-                            Spacer(modifier = Modifier.width(2.dp))
-                            Text(
-                                text = item.sourceLocation,
-                                fontSize = 11.sp,
-                                color = GlassWaterBlue,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
-                }
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "+ ${CashPdfGenerator.formatAmount(item.amount, currency)}",
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.ExtraBold),
@@ -329,15 +293,60 @@ private fun ReplenishmentDropletItem(
                 if (canDelete) {
                     IconButton(
                         onClick = onDelete,
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(32.dp)
                     ) {
                         Icon(
                             Icons.Default.DeleteOutline,
                             contentDescription = "Supprimer",
                             tint = GlassTextMuted,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(16.dp)
                         )
                     }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Bottom metadata Row cleanly indented under reason
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 42.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = item.time,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = GlassTextMuted
+                )
+
+                Text(text = "•", fontSize = 11.sp, color = GlassTextMuted)
+
+                // Source Location Pill
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFFF1F5F9))
+                        .border(0.8.dp, Color(0xFFE2E8F0), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 7.dp, vertical = 2.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Place,
+                        contentDescription = null,
+                        tint = GlassWaterBlue,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text(
+                        text = item.sourceLocation,
+                        fontSize = 10.5.sp,
+                        color = GlassWaterBlue,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1
+                    )
                 }
             }
         }

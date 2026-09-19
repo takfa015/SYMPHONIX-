@@ -269,19 +269,18 @@ private fun DisbursementDropletItem(
         accentGlow = GlassCoralRed,
         containerColor = Color(0x8CFFFFFF)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+        Column(
+            modifier = Modifier.fillMaxWidth()
         ) {
+            // Top Row: [#02 badge] + [Designation] + [Amount & Delete]
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 // Order Number Badge
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(32.dp)
                         .clip(CircleShape)
                         .background(GlassCoralRedBg),
                     contentAlignment = Alignment.Center
@@ -294,67 +293,17 @@ private fun DisbursementDropletItem(
                     )
                 }
 
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(10.dp))
 
-                Column {
-                    Text(
-                        text = item.designation,
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                        color = GlassTextPrimary
-                    )
+                Text(
+                    text = item.designation,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                    color = GlassTextPrimary,
+                    modifier = Modifier.weight(1f)
+                )
 
-                    Spacer(modifier = Modifier.height(3.dp))
+                Spacer(modifier = Modifier.width(8.dp))
 
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = item.time,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = GlassTextMuted
-                        )
-
-                        Text(text = "•", fontSize = 11.sp, color = GlassTextMuted)
-
-                        // Category tag
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0x1F0F172A))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = item.fullCategory,
-                                fontSize = 10.5.sp,
-                                color = GlassTextSecondary,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-
-                        if (item.recipient.isNotBlank()) {
-                            Text(text = "•", fontSize = 11.sp, color = GlassTextMuted)
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Default.Person,
-                                    contentDescription = null,
-                                    tint = GlassTextMuted,
-                                    modifier = Modifier.size(12.dp)
-                                )
-                                Spacer(modifier = Modifier.width(2.dp))
-                                Text(
-                                    text = item.recipient,
-                                    fontSize = 10.5.sp,
-                                    color = GlassTextMuted
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "- ${CashPdfGenerator.formatAmount(item.amount, currency)}",
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.ExtraBold),
@@ -364,13 +313,76 @@ private fun DisbursementDropletItem(
                 if (canDelete) {
                     IconButton(
                         onClick = onDelete,
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(32.dp)
                     ) {
                         Icon(
                             Icons.Default.DeleteOutline,
                             contentDescription = "Supprimer",
                             tint = GlassTextMuted,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Bottom metadata Row cleanly indented under designation
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 42.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = item.time,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = GlassTextMuted
+                )
+
+                Text(text = "•", fontSize = 11.sp, color = GlassTextMuted)
+
+                // Category tag (clean pill, single line)
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFFF1F5F9))
+                        .border(0.8.dp, Color(0xFFE2E8F0), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 7.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = item.fullCategory,
+                        fontSize = 10.5.sp,
+                        color = GlassTextSecondary,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1
+                    )
+                }
+
+                if (item.recipient.isNotBlank()) {
+                    Text(text = "•", fontSize = 11.sp, color = GlassTextMuted)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFFF1F5F9))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Person,
+                            contentDescription = null,
+                            tint = GlassTextMuted,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(
+                            text = item.recipient,
+                            fontSize = 10.5.sp,
+                            color = GlassTextMuted,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1
                         )
                     }
                 }

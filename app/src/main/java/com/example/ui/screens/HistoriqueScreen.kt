@@ -45,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.SessionWithDetails
@@ -161,14 +162,19 @@ fun HistoriqueScreen(
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.Top
                     ) {
-                        Column {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 10.dp)
+                        ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     text = session.reference,
                                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.ExtraBold),
-                                    color = GlassTextPrimary
+                                    color = GlassTextPrimary,
+                                    maxLines = 1
                                 )
                                 if (isCurrentSelected) {
                                     Spacer(modifier = Modifier.width(6.dp))
@@ -182,35 +188,41 @@ fun HistoriqueScreen(
                                             text = "Actuelle",
                                             fontSize = 9.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = GlassPureWhite
+                                            color = GlassPureWhite,
+                                            maxLines = 1
                                         )
                                     }
                                 }
                             }
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = "${session.dateText} • ${session.establishmentName}",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = GlassTextMuted
+                                color = GlassTextMuted,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
 
-                        // Status Badge
+                        // Status Badge (Fixed, never wrapped character-by-character)
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(10.dp))
                                 .background(if (isClosed) GlassEmeraldGreenBg else GlassWaterBlueBg)
                                 .border(
                                     1.dp,
                                     if (isClosed) GlassEmeraldGreen.copy(alpha = 0.4f) else GlassWaterBlue.copy(alpha = 0.4f),
-                                    RoundedCornerShape(12.dp)
+                                    RoundedCornerShape(10.dp)
                                 )
-                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Text(
                                 text = if (isClosed) "Clôturée (${session.closingTime ?: ""})" else "Ouverte",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (isClosed) GlassEmeraldGreen else GlassWaterBlue
+                                color = if (isClosed) GlassEmeraldGreen else GlassWaterBlue,
+                                maxLines = 1,
+                                softWrap = false
                             )
                         }
                     }

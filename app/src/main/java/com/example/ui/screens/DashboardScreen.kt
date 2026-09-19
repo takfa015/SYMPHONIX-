@@ -129,19 +129,21 @@ fun DashboardScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                         Text(
                             text = session.establishmentName.ifBlank { "SYMPHONIX" },
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = 0.3.sp
                             ),
-                            color = SymphonixDeepBlue
+                            color = SymphonixDeepBlue,
+                            maxLines = 1
                         )
                         Text(
                             text = session.establishmentSubTitle.ifBlank { "Session ${session.reference}" },
                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
-                            color = SymphonixBlue
+                            color = SymphonixBlue,
+                            maxLines = 1
                         )
                     }
 
@@ -161,7 +163,9 @@ fun DashboardScreen(
                             text = if (isClosed) "Clôturée (${session.closingTime ?: ""})" else "En cours (Ouverte)",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (isClosed) GlassEmeraldGreen else SymphonixBlue
+                            color = if (isClosed) GlassEmeraldGreen else SymphonixBlue,
+                            maxLines = 1,
+                            softWrap = false
                         )
                     }
                 }
