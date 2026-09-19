@@ -40,7 +40,12 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import com.example.util.NotificationHelper
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -111,6 +116,22 @@ fun DashboardScreen(
     val session = sessionDetails.session
     val currency = session.currency
 
+    val context = LocalContext.current
+    val lowBalanceEnabled = remember { NotificationHelper.isLowBalanceAlertEnabled(context) }
+    val lowBalanceThreshold = remember { NotificationHelper.getLowBalanceThreshold(context) }
+    val isLowBalance = lowBalanceEnabled && sessionDetails.theoreticalBalance < lowBalanceThreshold && !session.isClosed
+
+    LaunchedEffect(isLowBalance) {
+        if (isLowBalance) {
+            NotificationHelper.sendLowBalanceNotification(
+                context,
+                sessionDetails.theoreticalBalance,
+                lowBalanceThreshold,
+                currency
+            )
+        }
+    }
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -167,6 +188,54 @@ fun DashboardScreen(
                             maxLines = 1,
                             softWrap = false
                         )
+                    }
+                }
+            }
+        }
+
+        // Low Balance Warning Banner
+        if (isLowBalance) {
+            item {
+                WaterDropCard(
+                    accentGlow = GlassCoralRed,
+                    containerColor = Color(0xFFFFF1F2)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFFFE4E6)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = GlassCoralRed,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Alerte : Solde de caisse faible !",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = Color(0xFF9F1239)
+                            )
+                            Text(
+                                text = "Solde : ${CashPdfGenerator.formatAmount(sessionDetails.theoreticalBalance, currency)} (Seuil d'alerte : ${CashPdfGenerator.formatAmount(lowBalanceThreshold, currency)})",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF881337)
+                            )
+                        }
+                        TextButton(
+                            onClick = { onNavigateTab(CashTab.ENCAISSEMENT) }
+                        ) {
+                            Text("Réassort", fontWeight = FontWeight.Bold, color = GlassCoralRed)
+                        }
                     }
                 }
             }

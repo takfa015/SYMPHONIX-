@@ -144,7 +144,23 @@ object CashPdfGenerator {
 
         var y = 42f
 
-        // 1. Header Title & Brand Tag
+        // 1. Header Title & Company Logo / Brand Tag
+        val companyLogo = CompanyLogoManager.getLogoBitmap(context)
+        val textLeftStart: Float
+        if (companyLogo != null) {
+            val maxLogoW = 52f
+            val maxLogoH = 34f
+            val ratio = companyLogo.width.toFloat() / companyLogo.height.toFloat().coerceAtLeast(1f)
+            val drawW = if (ratio > 1f) maxLogoW else (maxLogoH * ratio).coerceAtMost(maxLogoW)
+            val drawH = if (ratio > 1f) (maxLogoW / ratio).coerceAtMost(maxLogoH) else maxLogoH
+            val logoDestRect = RectF(leftMargin, y - 14f, leftMargin + drawW, y - 14f + drawH)
+            val logoPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+            canvas.drawBitmap(companyLogo, null, logoDestRect, logoPaint)
+            textLeftStart = leftMargin + drawW + 10f
+        } else {
+            textLeftStart = leftMargin
+        }
+
         val brandPaint = createPaint(
             color = Color.rgb(20, 107, 255), // Symphonix Blue
             textSize = 8.5f,
@@ -152,15 +168,15 @@ object CashPdfGenerator {
             letterSpacing = 0.06f
         )
         val brandTag = "SYMPHONIX  |  " + (if (session.establishmentName.isNotBlank()) session.establishmentName else "CAISSE").uppercase()
-        canvas.drawText(brandTag, leftMargin, y - 11f, brandPaint)
+        canvas.drawText(brandTag, textLeftStart, y - 11f, brandPaint)
 
         val titlePaint = createPaint(
             color = Color.rgb(11, 46, 115), // Symphonix Deep Blue
-            textSize = 14f,
+            textSize = 13.5f,
             isBold = true,
             letterSpacing = 0.03f
         )
-        canvas.drawText("FICHE DE RÉCAPITULATIF DE CAISSE", leftMargin, y + 4f, titlePaint)
+        canvas.drawText("FICHE DE RÉCAPITULATIF DE CAISSE", textLeftStart, y + 4f, titlePaint)
 
         // Date pill badge on top right
         val dateText = "Date : ${session.dateText}"
@@ -182,12 +198,12 @@ object CashPdfGenerator {
         y += 14f
         // Subtitle
         val subPaint = createPaint(
-            color = Color.rgb(100, 116, 139),
+            color = Color.rgb(71, 85, 105),
             textSize = 8.2f,
             isBold = false,
             letterSpacing = 0.015f
         )
-        canvas.drawText("Journal chronologique des décaissements et rapprochement du fond de roulement", leftMargin, y, subPaint)
+        canvas.drawText("Journal chronologique des décaissements et rapprochement du fond de roulement", textLeftStart, y, subPaint)
 
         // Document Reference
         val refText = "Réf. Document : ${session.reference}"

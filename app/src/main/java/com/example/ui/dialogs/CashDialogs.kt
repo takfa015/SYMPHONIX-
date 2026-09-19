@@ -78,6 +78,8 @@ import com.example.ui.theme.GlassBorderBottom
 import com.example.ui.theme.GlassBorderTop
 import com.example.ui.theme.GlassCoralRed
 import com.example.ui.theme.GlassCoralRedBg
+import com.example.util.CategoryManager
+import com.example.util.ExpenseCategory
 import com.example.ui.theme.GlassEmeraldGreen
 import com.example.ui.theme.GlassEmeraldGreenBg
 import com.example.ui.theme.GlassPureWhite
@@ -277,9 +279,9 @@ private fun StyledDialogTextField(
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        label = { Text(label, fontSize = 13.sp) },
+        label = { Text(label, fontSize = 13.sp, fontWeight = FontWeight.Medium) },
         placeholder = if (placeholder.isNotBlank()) {
-            { Text(placeholder, color = Color(0xFF94A3B8), fontSize = 13.sp) }
+            { Text(placeholder, color = Color(0xFF475569), fontSize = 13.sp) }
         } else null,
         leadingIcon = leadingIcon?.let {
             {
@@ -306,11 +308,16 @@ private fun StyledDialogTextField(
         shape = RoundedCornerShape(14.dp),
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         colors = OutlinedTextFieldDefaults.colors(
+            focusedTextColor = Color(0xFF0F172A),
+            unfocusedTextColor = Color(0xFF0F172A),
             focusedBorderColor = accentColor,
-            unfocusedBorderColor = Color(0xFFCBD5E1),
+            unfocusedBorderColor = Color(0xFF94A3B8),
             focusedContainerColor = Color.White,
-            unfocusedContainerColor = Color(0xFAF8FAFC),
+            unfocusedContainerColor = Color(0xFFF8FAFC),
             focusedLabelColor = accentColor,
+            unfocusedLabelColor = Color(0xFF1E293B),
+            focusedPlaceholderColor = Color(0xFF475569),
+            unfocusedPlaceholderColor = Color(0xFF475569),
             cursorColor = accentColor
         ),
         modifier = modifier.fillMaxWidth()
@@ -437,8 +444,8 @@ fun AddReplenishmentDialog(
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
                     text = "Motifs fréquents :",
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                    color = Color(0xFF64748B)
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                    color = Color(0xFF0F172A)
                 )
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     quickReasons.forEach { r ->
@@ -449,7 +456,7 @@ fun AddReplenishmentDialog(
                                 .background(if (isSelected) SymphonixLightBlue else Color(0xFFF1F5F9))
                                 .border(
                                     width = 1.dp,
-                                    color = if (isSelected) SymphonixBlue else Color(0xFFE2E8F0),
+                                    color = if (isSelected) SymphonixBlue else Color(0xFF94A3B8),
                                     shape = RoundedCornerShape(8.dp)
                                 )
                                 .clickable { reasonText = r }
@@ -458,8 +465,8 @@ fun AddReplenishmentDialog(
                             Text(
                                 text = r,
                                 fontSize = 11.5.sp,
-                                color = if (isSelected) SymphonixDeepBlue else Color(0xFF334155),
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                color = if (isSelected) SymphonixDeepBlue else Color(0xFF0F172A),
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold
                             )
                         }
                     }
@@ -479,8 +486,8 @@ fun AddReplenishmentDialog(
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
                     text = "Sources fréquentes :",
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                    color = Color(0xFF64748B)
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                    color = Color(0xFF0F172A)
                 )
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     quickSources.forEach { s ->
@@ -491,7 +498,7 @@ fun AddReplenishmentDialog(
                                 .background(if (isSelected) SymphonixLightBlue else Color(0xFFF1F5F9))
                                 .border(
                                     width = 1.dp,
-                                    color = if (isSelected) SymphonixBlue else Color(0xFFE2E8F0),
+                                    color = if (isSelected) SymphonixBlue else Color(0xFF94A3B8),
                                     shape = RoundedCornerShape(8.dp)
                                 )
                                 .clickable { sourceText = s }
@@ -500,8 +507,8 @@ fun AddReplenishmentDialog(
                             Text(
                                 text = s,
                                 fontSize = 11.5.sp,
-                                color = if (isSelected) SymphonixDeepBlue else Color(0xFF334155),
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                color = if (isSelected) SymphonixDeepBlue else Color(0xFF0F172A),
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold
                             )
                         }
                     }
@@ -521,22 +528,19 @@ fun AddDisbursementDialog(
     onDismiss: () -> Unit,
     onConfirm: (amount: Double, designation: String, parentCategory: String, subCategory: String, recipient: String, time: String) -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val categoriesList = remember { CategoryManager.getCategories(context) }
+
     var amountText by remember { mutableStateOf("") }
     var designationText by remember { mutableStateOf("") }
-    var parentCategory by remember { mutableStateOf("Matières premières") }
+    var parentCategory by remember {
+        mutableStateOf(categoriesList.firstOrNull()?.name ?: "Matières premières")
+    }
     var subCategoryText by remember { mutableStateOf("") }
     var recipientText by remember { mutableStateOf("") }
     var timeText by remember {
         mutableStateOf(SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date()))
     }
-
-    val categories = listOf(
-        Triple("Matières premières", Icons.Default.Restaurant, listOf("Œufs", "Volailles", "Farine & Levure", "Beurre & Sucre", "Produits laitiers")),
-        Triple("Personnel", Icons.Default.People, listOf("Rémunération", "Avance salaire", "Prime", "Repas")),
-        Triple("Frais généraux", Icons.Default.ReceiptLong, listOf("Emballages", "Électricité / Gaz", "Entretien", "Eau")),
-        Triple("Transport", Icons.Default.DirectionsCar, listOf("Carburant", "Frais livraison", "Péage")),
-        Triple("Divers", Icons.Default.MoreHoriz, listOf("Fournitures", "Autre dépense"))
-    )
 
     val amount = amountText.toDoubleOrNull() ?: 0.0
     val isValid = amount > 0 && designationText.isNotBlank()
@@ -554,10 +558,10 @@ fun AddDisbursementDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF475569)),
-                border = ButtonDefaults.outlinedButtonBorder.copy(brush = Brush.linearGradient(listOf(Color(0xFFCBD5E1), Color(0xFFCBD5E1))))
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF0F172A)),
+                border = ButtonDefaults.outlinedButtonBorder.copy(brush = Brush.linearGradient(listOf(Color(0xFF94A3B8), Color(0xFF94A3B8))))
             ) {
-                Text("Annuler", fontWeight = FontWeight.Medium)
+                Text("Annuler", fontWeight = FontWeight.Bold)
             }
         },
         confirmButton = {
@@ -633,8 +637,8 @@ fun AddDisbursementDialog(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     text = "Catégorie principale :",
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                    color = Color(0xFF64748B)
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                    color = Color(0xFF0F172A)
                 )
 
                 // Horizontally scrollable categorized pills
@@ -644,19 +648,20 @@ fun AddDisbursementDialog(
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    categories.forEach { (catName, catIcon, _) ->
-                        val isSelected = parentCategory == catName
+                    for (cat in categoriesList) {
+                        val isSelected = parentCategory == cat.name
+                        val catIcon = CategoryManager.getIconVector(cat.iconKey)
                         Row(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(10.dp))
                                 .background(if (isSelected) GlassCoralRed else Color(0xFFF1F5F9))
                                 .border(
                                     width = 1.dp,
-                                    color = if (isSelected) GlassCoralRed else Color(0xFFCBD5E1),
+                                    color = if (isSelected) GlassCoralRed else Color(0xFF94A3B8),
                                     shape = RoundedCornerShape(10.dp)
                                 )
                                 .clickable {
-                                    parentCategory = catName
+                                    parentCategory = cat.name
                                     subCategoryText = ""
                                 }
                                 .padding(horizontal = 12.dp, vertical = 7.dp),
@@ -665,15 +670,15 @@ fun AddDisbursementDialog(
                             Icon(
                                 imageVector = catIcon,
                                 contentDescription = null,
-                                tint = if (isSelected) Color.White else Color(0xFF64748B),
+                                tint = if (isSelected) Color.White else Color(0xFF0F172A),
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = catName,
-                                color = if (isSelected) Color.White else Color(0xFF334155),
+                                text = cat.name,
+                                color = if (isSelected) Color.White else Color(0xFF0F172A),
                                 fontSize = 12.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold
                             )
                         }
                     }
@@ -681,26 +686,26 @@ fun AddDisbursementDialog(
             }
 
             // Subcategory Suggestions
-            val currentCategoryData = categories.find { it.first == parentCategory }
-            val currentSubs = currentCategoryData?.third ?: emptyList()
+            val currentCategoryData = categoriesList.find { it.name == parentCategory }
+            val currentSubs = currentCategoryData?.subCategories ?: emptyList()
 
             if (currentSubs.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        text = "Suggestions pour \"$parentCategory\" :",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = Color(0xFF64748B)
+                        text = "Types & suggestions pour \"$parentCategory\" :",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = Color(0xFF0F172A)
                     )
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        currentSubs.forEach { sub ->
+                        for (sub in currentSubs) {
                             val isSelected = subCategoryText == sub
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isSelected) GlassCoralRedBg else Color(0xFFF8FAFC))
+                                    .background(if (isSelected) GlassCoralRedBg else Color(0xFFF1F5F9))
                                     .border(
                                         width = 1.dp,
-                                        color = if (isSelected) GlassCoralRed else Color(0xFFE2E8F0),
+                                        color = if (isSelected) GlassCoralRed else Color(0xFF94A3B8),
                                         shape = RoundedCornerShape(8.dp)
                                     )
                                     .clickable {
@@ -712,8 +717,8 @@ fun AddDisbursementDialog(
                                 Text(
                                     text = sub,
                                     fontSize = 11.5.sp,
-                                    color = if (isSelected) GlassCoralRed else Color(0xFF334155),
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    color = if (isSelected) GlassCoralRed else Color(0xFF0F172A),
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold
                                 )
                             }
                         }
@@ -892,8 +897,8 @@ fun CloseCashDialog(
                 ) {
                     Text(
                         text = "Saisie directe",
-                        color = if (!isDenominationMode) SymphonixDeepBlue else Color(0xFF64748B),
-                        fontWeight = if (!isDenominationMode) FontWeight.Bold else FontWeight.Medium,
+                        color = if (!isDenominationMode) SymphonixDeepBlue else Color(0xFF1E293B),
+                        fontWeight = if (!isDenominationMode) FontWeight.Bold else FontWeight.SemiBold,
                         fontSize = 12.5.sp
                     )
                 }
@@ -909,8 +914,8 @@ fun CloseCashDialog(
                 ) {
                     Text(
                         text = "Comptage coupures",
-                        color = if (isDenominationMode) SymphonixDeepBlue else Color(0xFF64748B),
-                        fontWeight = if (isDenominationMode) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isDenominationMode) SymphonixDeepBlue else Color(0xFF1E293B),
+                        fontWeight = if (isDenominationMode) FontWeight.Bold else FontWeight.SemiBold,
                         fontSize = 12.5.sp
                     )
                 }
@@ -989,8 +994,8 @@ fun CloseCashDialog(
                             Text(
                                 text = CashPdfGenerator.formatAmount((count * denom).toDouble(), currency),
                                 style = MaterialTheme.typography.bodySmall.copy(
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Color(0xFF64748B)
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF0F172A)
                                 )
                             )
                         }

@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -95,6 +96,17 @@ fun CashScreen(
     val selectedSessionId by viewModel.selectedSessionId.collectAsStateWithLifecycle()
 
     var selectedTab by remember { mutableStateOf(CashTab.DASHBOARD) }
+    var displayedTab by remember { mutableStateOf(CashTab.DASHBOARD) }
+    var isTabLoading by remember { mutableStateOf(false) }
+
+    LaunchedEffect(selectedTab) {
+        if (selectedTab != displayedTab) {
+            isTabLoading = true
+            kotlinx.coroutines.delay(160)
+            displayedTab = selectedTab
+            isTabLoading = false
+        }
+    }
 
     var showAddReplenishmentDialog by remember { mutableStateOf(false) }
     var showAddDisbursementDialog by remember { mutableStateOf(false) }
@@ -253,7 +265,7 @@ fun CashScreen(
                         .widthIn(max = 680.dp)
                 ) {
                     AnimatedContent(
-                        targetState = selectedTab,
+                        targetState = displayedTab,
                         transitionSpec = {
                             val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
                             (slideInHorizontally(
@@ -347,6 +359,42 @@ fun CashScreen(
                                         }
                                     }
                                 )
+                            }
+                        }
+                    }
+
+                    // Fluid loading transition indicator between pages
+                    if (isTabLoading) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color(0x33F8FAFC)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(Color(0xF5FFFFFF))
+                                    .border(1.dp, SymphonixBlue.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
+                                    .padding(horizontal = 24.dp, vertical = 18.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(32.dp),
+                                        color = SymphonixBlue,
+                                        strokeWidth = 3.dp
+                                    )
+                                    Text(
+                                        text = "Chargement de ${selectedTab.title}...",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = SymphonixDeepBlue
+                                    )
+                                }
                             }
                         }
                     }

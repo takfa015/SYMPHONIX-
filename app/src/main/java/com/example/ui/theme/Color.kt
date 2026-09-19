@@ -76,6 +76,8 @@ val GlassCoralRed = SymphonixRedExpense
 val GlassCoralRedDark = Color(0xFFBE123C)
 val GlassCoralRedBg = Color(0x1FE11D48)
 
-val GlassTextPrimary = SymphonixNearBlack
-val GlassTextSecondary = Color(0xFF1E293B)
-val GlassTextMuted = Color(0xFF64748B)
+val GlassTextPrimary = Color(0xFF0B0F17)   // Deep black
+val GlassTextSecondary = Color(0xFF1E293B) // Dark charcoal
+val GlassTextMuted = Color(0xFF334155)     // High contrast dark slate (never faint grey)
+val GlassTextPlaceholder = Color(0xFF475569) // Clearly visible dark placeholder
+

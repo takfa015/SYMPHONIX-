@@ -1,7 +1,9 @@
 package com.example.ui.screens
 
+import android.Manifest
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
@@ -13,6 +15,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,26 +26,37 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Business
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Print
+import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -67,6 +82,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -77,6 +93,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.NotificationManagerCompat
 import com.example.R
 import com.example.data.model.SessionWithDetails
 import com.example.ui.components.WaterDropCard
@@ -94,7 +111,11 @@ import com.example.ui.theme.SymphonixBlue
 import com.example.ui.theme.SymphonixDeepBlue
 import com.example.ui.theme.SymphonixLightBlue
 import com.example.util.BackupData
+import com.example.util.CategoryManager
 import com.example.util.CashBackupManager
+import com.example.util.CompanyLogoManager
+import com.example.util.ExpenseCategory
+import com.example.util.NotificationHelper
 import com.example.util.RestoreMode
 import com.example.util.RestoreResult
 import com.example.util.SecurityManager
@@ -160,6 +181,48 @@ fun ParametresScreen(
     var restoreMode by remember { mutableStateOf(RestoreMode.REPLACE) }
     var lastExportedJson by remember { mutableStateOf<String?>(null) }
     var showUpdateHelpDialog by remember { mutableStateOf(false) }
+
+    // Company Logo State
+    var customLogoBitmap by remember { mutableStateOf(CompanyLogoManager.getLogoBitmap(context)) }
+    val pickLogoLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            val success = CompanyLogoManager.saveLogoFromUri(context, uri)
+            if (success) {
+                customLogoBitmap = CompanyLogoManager.getLogoBitmap(context)
+                Toast.makeText(context, "Logo de l'entreprise enregistré avec succès !", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, "Erreur lors de l'enregistrement de l'image", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    // Notification State
+    var closingReminderEnabled by remember { mutableStateOf(NotificationHelper.isClosingReminderEnabled(context)) }
+    var closingReminderTime by remember { mutableStateOf(NotificationHelper.getClosingReminderTime(context)) }
+    var lowBalanceEnabled by remember { mutableStateOf(NotificationHelper.isLowBalanceAlertEnabled(context)) }
+    var lowBalanceThresholdText by remember { mutableStateOf(NotificationHelper.getLowBalanceThreshold(context).toLong().toString()) }
+
+    val requestNotifPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            Toast.makeText(context, "Notifications autorisées !", Toast.LENGTH_SHORT).show()
+            NotificationHelper.sendTestNotification(context)
+        } else {
+            Toast.makeText(context, "Permission de notification refusée", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // Category Management State
+    var categoriesList by remember { mutableStateOf(CategoryManager.getCategories(context)) }
+    var showAddCategoryDialog by remember { mutableStateOf(false) }
+    var newCategoryName by remember { mutableStateOf("") }
+    var newCategoryIconKey by remember { mutableStateOf("category") }
+    var showAddSubDialogForCategory by remember { mutableStateOf<ExpenseCategory?>(null) }
+    var newSubCategoryName by remember { mutableStateOf("") }
+    var showResetCategoriesConfirmation by remember { mutableStateOf(false) }
 
     // File pickers
     val openDocumentLauncher = rememberLauncherForActivityResult(
@@ -484,6 +547,138 @@ fun ParametresScreen(
                     )
                 }
 
+                HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = Color(0x1F000000))
+
+                // Logo Entreprise pour le PDF
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFFF8FAFC))
+                        .border(1.dp, Color(0xFFCBD5E1), RoundedCornerShape(14.dp))
+                        .padding(12.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Image, contentDescription = null, tint = SymphonixBlue, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "Logo officiel de l'entreprise (PDF)",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Color(0xFF0F172A)
+                            )
+                        }
+
+                        if (customLogoBitmap != null) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color(0xFFDCFCE7))
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text("Personnalisé", color = Color(0xFF166534), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color(0xFFF1F5F9))
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text("Par défaut", color = Color(0xFF475569), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = if (customLogoBitmap != null)
+                            "Votre logo personnalisé est actuellement injecté en tête de toutes les fiches PDF générées."
+                        else
+                            "Aucun logo spécifique n'est défini. L'en-tête officiel SYMPHONIX est actuellement utilisé par défaut.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF334155)
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    if (customLogoBitmap != null) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color.White)
+                                    .border(1.dp, Color(0xFFCBD5E1), RoundedCornerShape(10.dp))
+                                    .padding(4.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Image(
+                                    bitmap = customLogoBitmap!!.asImageBitmap(),
+                                    contentDescription = "Logo entreprise",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Fit
+                                )
+                            }
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Button(
+                                    onClick = {
+                                        pickLogoLauncher.launch(
+                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                        )
+                                    },
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = SymphonixBlue),
+                                    modifier = Modifier.fillMaxWidth().height(36.dp)
+                                ) {
+                                    Text("Changer le logo", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                }
+
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                OutlinedButton(
+                                    onClick = {
+                                        CompanyLogoManager.deleteCustomLogo(context)
+                                        customLogoBitmap = null
+                                        Toast.makeText(context, "Logo supprimé, retour au logo par défaut", Toast.LENGTH_SHORT).show()
+                                    },
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFE11D48)),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFDA4AF)),
+                                    modifier = Modifier.fillMaxWidth().height(36.dp)
+                                ) {
+                                    Text("Supprimer", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+                        }
+                    } else {
+                        Button(
+                            onClick = {
+                                pickLogoLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = SymphonixBlue),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Choisir un logo pour le PDF", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(14.dp))
 
                 OutlinedButton(
@@ -494,6 +689,372 @@ fun ParametresScreen(
                     Icon(Icons.Default.Print, contentDescription = null, tint = SymphonixBlue, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Tester la génération du PDF", color = SymphonixBlue, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+
+        // Section: Système de Notifications & Alertes de Caisse
+        item {
+            WaterDropCard(
+                accentGlow = SymphonixBlue,
+                containerColor = Color(0x90FFFFFF)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = SymphonixBlue, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Système d'Alertes & Notifications",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color(0xFF0F172A)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Toggle 1: Oubli de clôture de caisse
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Avertissement oubli de clôture",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color(0xFF0F172A)
+                        )
+                        Text(
+                            "Notifie si la caisse du jour reste ouverte à l'heure fixée",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF334155)
+                        )
+                    }
+                    Switch(
+                        checked = closingReminderEnabled,
+                        onCheckedChange = { enabled ->
+                            closingReminderEnabled = enabled
+                            NotificationHelper.setClosingReminderEnabled(context, enabled)
+                            if (enabled) {
+                                if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+                                    requestNotifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                } else {
+                                    NotificationHelper.scheduleDailyClosingReminder(context, closingReminderTime)
+                                }
+                            } else {
+                                NotificationHelper.cancelDailyClosingReminder(context)
+                            }
+                        },
+                        colors = SwitchDefaults.colors(checkedThumbColor = SymphonixBlue, checkedTrackColor = SymphonixLightBlue)
+                    )
+                }
+
+                if (closingReminderEnabled) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Heure de rappel de clôture :",
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color(0xFF1E293B)
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf("18:00", "19:00", "20:00", "21:00", "22:00").forEach { timeStr ->
+                            val isSelected = closingReminderTime == timeStr
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSelected) SymphonixBlue else Color(0xFFF1F5F9))
+                                    .border(1.dp, if (isSelected) SymphonixBlue else Color(0xFFCBD5E1), RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        closingReminderTime = timeStr
+                                        NotificationHelper.setClosingReminderTime(context, timeStr)
+                                        Toast.makeText(context, "Rappel programmé pour $timeStr", Toast.LENGTH_SHORT).show()
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = timeStr,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                    color = if (isSelected) Color.White else Color(0xFF1E293B)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = Color(0x1F000000))
+
+                // Toggle 2: Solde faible
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Avertissement solde faible",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color(0xFF0F172A)
+                        )
+                        Text(
+                            "Déclenche une alerte quand le montant disponible passe sous un seuil",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF334155)
+                        )
+                    }
+                    Switch(
+                        checked = lowBalanceEnabled,
+                        onCheckedChange = { enabled ->
+                            lowBalanceEnabled = enabled
+                            NotificationHelper.setLowBalanceAlertEnabled(context, enabled)
+                            if (enabled && !NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+                                requestNotifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                        },
+                        colors = SwitchDefaults.colors(checkedThumbColor = SymphonixBlue, checkedTrackColor = SymphonixLightBlue)
+                    )
+                }
+
+                if (lowBalanceEnabled) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = lowBalanceThresholdText,
+                        onValueChange = { input ->
+                            val clean = input.filter { c -> c.isDigit() }
+                            lowBalanceThresholdText = clean
+                            clean.toDoubleOrNull()?.let { threshold ->
+                                NotificationHelper.setLowBalanceThreshold(context, threshold)
+                            }
+                        },
+                        label = { Text("Seuil d'alerte solde minimum") },
+                        trailingIcon = { Text(currency, modifier = Modifier.padding(end = 12.dp), fontWeight = FontWeight.Bold, color = SymphonixBlue) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = SymphonixBlue,
+                            unfocusedBorderColor = Color(0xFF94A3B8),
+                            focusedLabelColor = SymphonixBlue,
+                            unfocusedLabelColor = Color(0xFF1E293B)
+                        )
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                OutlinedButton(
+                    onClick = {
+                        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+                            requestNotifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            NotificationHelper.sendTestNotification(context)
+                            Toast.makeText(context, "Notification test envoyée !", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.Notifications, contentDescription = null, tint = SymphonixBlue, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Tester les notifications système", color = SymphonixBlue, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        // Section: Gestion des Catégories & Types de Dépenses
+        item {
+            WaterDropCard(
+                accentGlow = GlassCoralRed,
+                containerColor = Color(0x90FFFFFF)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Category, contentDescription = null, tint = GlassCoralRed, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Catégories & Types de Dépenses",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = Color(0xFF0F172A)
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFFFFE4E6))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text("${categoriesList.size} Catégories", color = GlassCoralRed, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Personnalisez librement les catégories principales et leurs types de dépenses (sous-catégories) proposées lors des décaissements.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF334155)
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    categoriesList.forEach { cat ->
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Color(0xFFF8FAFC))
+                                .border(1.dp, Color(0xFFCBD5E1), RoundedCornerShape(14.dp))
+                                .padding(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFFFFE4E6)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = cat.name.take(1).uppercase(),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            color = GlassCoralRed
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = cat.name,
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = Color(0xFF0F172A)
+                                    )
+                                }
+
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    // Add subcategory button
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(Color(0xFFEFF6FF))
+                                            .clickable {
+                                                newSubCategoryName = ""
+                                                showAddSubDialogForCategory = cat
+                                            }
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Default.Add, contentDescription = "Ajouter type", tint = SymphonixBlue, modifier = Modifier.size(14.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("+ Type", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SymphonixBlue)
+                                        }
+                                    }
+
+                                    if (categoriesList.size > 1) {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .clickable {
+                                                    CategoryManager.deleteCategory(context, cat.id)
+                                                    categoriesList = CategoryManager.getCategories(context)
+                                                    Toast.makeText(context, "Catégorie supprimée", Toast.LENGTH_SHORT).show()
+                                                }
+                                                .padding(6.dp)
+                                        ) {
+                                            Icon(Icons.Default.Delete, contentDescription = "Supprimer", tint = Color(0xFFE11D48), modifier = Modifier.size(16.dp))
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Subcategories as removable chips
+                            @OptIn(ExperimentalLayoutApi::class)
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                cat.subCategories.forEach { sub ->
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(Color.White)
+                                            .border(1.dp, Color(0xFFCBD5E1), RoundedCornerShape(8.dp))
+                                            .padding(start = 8.dp, end = 4.dp, top = 3.dp, bottom = 3.dp)
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = sub,
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = Color(0xFF0F172A)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Icon(
+                                                Icons.Default.Close,
+                                                contentDescription = "Retirer",
+                                                tint = Color(0xFF64748B),
+                                                modifier = Modifier
+                                                    .size(16.dp)
+                                                    .clickable {
+                                                        CategoryManager.removeSubCategory(context, cat.id, sub)
+                                                        categoriesList = CategoryManager.getCategories(context)
+                                                    }
+                                                    .padding(2.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            newCategoryName = ""
+                            showAddCategoryDialog = true
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = GlassCoralRed),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1f).height(42.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Ajouter catégorie", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+
+                    OutlinedButton(
+                        onClick = { showResetCategoriesConfirmation = true },
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFCBD5E1)),
+                        modifier = Modifier.height(42.dp)
+                    ) {
+                        Icon(Icons.Default.RestartAlt, contentDescription = null, tint = Color(0xFF475569), modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Par défaut", color = Color(0xFF334155), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                    }
                 }
             }
         }
@@ -970,6 +1531,199 @@ fun ParametresScreen(
             dismissButton = {
                 TextButton(onClick = { showRestoreDialog = false }) {
                     Text("Annuler")
+                }
+            }
+        )
+    }
+
+    // Reset Categories Confirmation Dialog
+    if (showResetCategoriesConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showResetCategoriesConfirmation = false },
+            title = {
+                Text("Réinitialiser les catégories ?", fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+            },
+            text = {
+                Text(
+                    "Toutes les catégories personnalisées seront restaurées aux valeurs par défaut d'origine de l'application.",
+                    color = Color(0xFF334155)
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        CategoryManager.resetToDefaults(context)
+                        categoriesList = CategoryManager.getCategories(context)
+                        showResetCategoriesConfirmation = false
+                        Toast.makeText(context, "Catégories réinitialisées avec succès !", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE11D48))
+                ) {
+                    Text("Réinitialiser", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetCategoriesConfirmation = false }) {
+                    Text("Annuler", color = Color(0xFF334155))
+                }
+            }
+        )
+    }
+
+    // Add New Category Dialog
+    if (showAddCategoryDialog) {
+        var categoryNameInput by remember { mutableStateOf("") }
+        var initialTypeInput by remember { mutableStateOf("") }
+        var inputError by remember { mutableStateOf<String?>(null) }
+
+        AlertDialog(
+            onDismissRequest = { showAddCategoryDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Category, contentDescription = null, tint = GlassCoralRed)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Nouvelle Catégorie", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF0F172A))
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Créez une nouvelle catégorie de dépense avec ses types associés :",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF334155)
+                    )
+
+                    OutlinedTextField(
+                        value = categoryNameInput,
+                        onValueChange = {
+                            categoryNameInput = it
+                            inputError = null
+                        },
+                        label = { Text("Nom de la catégorie") },
+                        placeholder = { Text("ex: Transport & Logistique") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = GlassCoralRed,
+                            unfocusedBorderColor = Color(0xFF94A3B8),
+                            focusedLabelColor = GlassCoralRed,
+                            unfocusedLabelColor = Color(0xFF1E293B)
+                        )
+                    )
+
+                    OutlinedTextField(
+                        value = initialTypeInput,
+                        onValueChange = { initialTypeInput = it },
+                        label = { Text("Premier type de dépense (optionnel)") },
+                        placeholder = { Text("ex: Carburant véhicules") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = GlassCoralRed,
+                            unfocusedBorderColor = Color(0xFF94A3B8),
+                            focusedLabelColor = GlassCoralRed,
+                            unfocusedLabelColor = Color(0xFF1E293B)
+                        )
+                    )
+
+                    if (inputError != null) {
+                        Text(inputError!!, color = GlassCoralRed, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val trimmed = categoryNameInput.trim()
+                        if (trimmed.isBlank()) {
+                            inputError = "Veuillez saisir un nom de catégorie."
+                        } else {
+                            val subs = if (initialTypeInput.isNotBlank()) listOf(initialTypeInput.trim()) else listOf(trimmed)
+                            categoriesList = CategoryManager.addCategory(context, trimmed, "category", subs)
+                            showAddCategoryDialog = false
+                            Toast.makeText(context, "Catégorie « $trimmed » ajoutée !", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = GlassCoralRed)
+                ) {
+                    Text("Créer", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddCategoryDialog = false }) {
+                    Text("Annuler", color = Color(0xFF334155))
+                }
+            }
+        )
+    }
+
+    // Add Subcategory (Type) Dialog
+    if (showAddSubDialogForCategory != null) {
+        val cat = showAddSubDialogForCategory!!
+        var subNameInput by remember { mutableStateOf("") }
+        var subError by remember { mutableStateOf<String?>(null) }
+
+        AlertDialog(
+            onDismissRequest = { showAddSubDialogForCategory = null },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Add, contentDescription = null, tint = SymphonixBlue)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Ajouter un type pour « ${cat.name} »", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color(0xFF0F172A))
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Entrez l'intitulé du nouveau type ou motif de dépense :",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF334155)
+                    )
+
+                    OutlinedTextField(
+                        value = subNameInput,
+                        onValueChange = {
+                            subNameInput = it
+                            subError = null
+                        },
+                        label = { Text("Type de dépense") },
+                        placeholder = { Text("ex: Frais de déplacement") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = SymphonixBlue,
+                            unfocusedBorderColor = Color(0xFF94A3B8),
+                            focusedLabelColor = SymphonixBlue,
+                            unfocusedLabelColor = Color(0xFF1E293B)
+                        )
+                    )
+
+                    if (subError != null) {
+                        Text(subError!!, color = GlassCoralRed, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val trimmed = subNameInput.trim()
+                        if (trimmed.isBlank()) {
+                            subError = "Veuillez saisir un intitulé."
+                        } else {
+                            CategoryManager.addSubCategory(context, cat.id, trimmed)
+                            categoriesList = CategoryManager.getCategories(context)
+                            showAddSubDialogForCategory = null
+                            Toast.makeText(context, "Type « $trimmed » ajouté !", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = SymphonixBlue)
+                ) {
+                    Text("Ajouter", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddSubDialogForCategory = null }) {
+                    Text("Annuler", color = Color(0xFF334155))
                 }
             }
         )
