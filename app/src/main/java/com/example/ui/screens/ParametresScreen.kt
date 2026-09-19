@@ -1,6 +1,8 @@
 package com.example.ui.screens
 
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -28,13 +30,17 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -47,6 +53,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -67,6 +74,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
@@ -85,6 +93,11 @@ import com.example.ui.theme.GlassWaterBlueBg
 import com.example.ui.theme.SymphonixBlue
 import com.example.ui.theme.SymphonixDeepBlue
 import com.example.ui.theme.SymphonixLightBlue
+import com.example.util.BackupData
+import com.example.util.CashBackupManager
+import com.example.util.RestoreMode
+import com.example.util.RestoreResult
+import com.example.util.SecurityManager
 
 @Composable
 fun ParametresScreen(
@@ -98,6 +111,9 @@ fun ParametresScreen(
         initialFund: Double
     ) -> Unit,
     onExportPdf: () -> Unit = {},
+    onExportBackup: ((onReady: (String, android.content.Intent) -> Unit) -> Unit)? = null,
+    onParseBackup: ((String) -> BackupData?)? = null,
+    onRestoreBackup: ((BackupData, RestoreMode, (RestoreResult) -> Unit) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val currentSession = sessionDetails?.session
@@ -129,6 +145,58 @@ fun ParametresScreen(
     var selectedReportLanguage by remember { mutableStateOf("Français (Officiel)") }
     var soundFeedback by remember { mutableStateOf(true) }
     var showResetConfirmation by remember { mutableStateOf(false) }
+
+    // PIN Security state
+    var isPinSecurityActive by remember { mutableStateOf(SecurityManager.isSecurityEnabled(context)) }
+    var hasConfiguredPin by remember { mutableStateOf(SecurityManager.isPinConfigured(context)) }
+    var showPinDialog by remember { mutableStateOf(false) }
+    var newPinInput by remember { mutableStateOf("") }
+    var confirmPinInput by remember { mutableStateOf("") }
+    var pinDialogError by remember { mutableStateOf<String?>(null) }
+
+    // Backup & Restore state
+    var showRestoreDialog by remember { mutableStateOf(false) }
+    var pendingBackupData by remember { mutableStateOf<BackupData?>(null) }
+    var restoreMode by remember { mutableStateOf(RestoreMode.REPLACE) }
+    var lastExportedJson by remember { mutableStateOf<String?>(null) }
+    var showUpdateHelpDialog by remember { mutableStateOf(false) }
+
+    // File pickers
+    val openDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            val jsonText = CashBackupManager.readFromUri(context, uri)
+            if (!jsonText.isNullOrBlank()) {
+                val parsed = onParseBackup?.invoke(jsonText) ?: try {
+                    CashBackupManager.parseBackup(jsonText)
+                } catch (e: Exception) {
+                    null
+                }
+                if (parsed != null) {
+                    pendingBackupData = parsed
+                    showRestoreDialog = true
+                } else {
+                    Toast.makeText(context, "Fichier de sauvegarde invalide ou corrompu", Toast.LENGTH_LONG).show()
+                }
+            } else {
+                Toast.makeText(context, "Impossible de lire le fichier sélectionné", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    val createDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null && lastExportedJson != null) {
+            val success = CashBackupManager.writeToUri(context, uri, lastExportedJson!!)
+            if (success) {
+                Toast.makeText(context, "Sauvegarde enregistrée avec succès !", Toast.LENGTH_LONG).show()
+            } else {
+                Toast.makeText(context, "Erreur lors de l'enregistrement", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     val currencyPresets = listOf("DA", "€", "$", "DZD", "CHF", "MAD")
 
@@ -496,7 +564,211 @@ fun ParametresScreen(
             }
         }
 
-        // Section 4: Charte Graphique Officielle SYMPHONIX
+        // Section 4: Sécurité & Code d'Accès
+        item {
+            WaterDropCard(
+                accentGlow = SymphonixBlue,
+                containerColor = Color(0x90FFFFFF)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = null,
+                        tint = SymphonixBlue,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Sécurité & Contrôle d'Accès",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = SymphonixDeepBlue
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Verrouillage par code PIN",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = GlassTextPrimary
+                        )
+                        Text(
+                            text = if (hasConfiguredPin) "Code PIN configuré et actif au démarrage" else "Exige un mot de passe ou code PIN pour ouvrir l'application",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = GlassTextSecondary
+                        )
+                    }
+                    Switch(
+                        checked = isPinSecurityActive,
+                        onCheckedChange = { checked ->
+                            if (checked) {
+                                if (!hasConfiguredPin) {
+                                    showPinDialog = true
+                                } else {
+                                    SecurityManager.setSecurityEnabled(context, true)
+                                    isPinSecurityActive = true
+                                    Toast.makeText(context, "Verrouillage par code PIN activé", Toast.LENGTH_SHORT).show()
+                                }
+                            } else {
+                                SecurityManager.setSecurityEnabled(context, false)
+                                isPinSecurityActive = false
+                                Toast.makeText(context, "Verrouillage désactivé", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = SymphonixBlue,
+                            checkedTrackColor = SymphonixLightBlue
+                        )
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            newPinInput = ""
+                            confirmPinInput = ""
+                            pinDialogError = null
+                            showPinDialog = true
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Security, contentDescription = null, tint = SymphonixBlue, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (hasConfiguredPin) "Modifier le code PIN" else "Définir un code PIN",
+                            color = SymphonixBlue,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    if (hasConfiguredPin) {
+                        TextButton(
+                            onClick = {
+                                SecurityManager.removePin(context)
+                                hasConfiguredPin = false
+                                isPinSecurityActive = false
+                                Toast.makeText(context, "Code PIN supprimé", Toast.LENGTH_SHORT).show()
+                            }
+                        ) {
+                            Text(
+                                text = "Supprimer",
+                                color = GlassCoralRed,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Section 5: Sauvegarde & Restauration (Anti-Perte de données lors des mises à jour)
+        item {
+            WaterDropCard(
+                accentGlow = GlassEmeraldGreen,
+                containerColor = Color(0x95FFFFFF)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.FileUpload,
+                            contentDescription = null,
+                            tint = GlassEmeraldGreen,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Sauvegarde & Restauration (JSON)",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = SymphonixDeepBlue
+                        )
+                    }
+
+                    TextButton(
+                        onClick = { showUpdateHelpDialog = true }
+                    ) {
+                        Icon(Icons.Default.Info, contentDescription = "Aide", tint = SymphonixBlue, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Pourquoi ?", fontSize = 11.sp, color = SymphonixBlue)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Text(
+                    text = "Protégez vos données de caisse avant chaque mise à jour ou changement d'appareil. L'export génère un fichier JSON complet et réimportable.",
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 17.sp),
+                    color = GlassTextSecondary
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Export Button
+                    Button(
+                        onClick = {
+                            if (onExportBackup != null) {
+                                onExportBackup { jsonString, shareIntent ->
+                                    lastExportedJson = jsonString
+                                    try {
+                                        context.startActivity(shareIntent)
+                                    } catch (_: Exception) {
+                                        // Fallback to direct document creation
+                                        val dateFmt = java.text.SimpleDateFormat("yyyyMMdd_HHmm", java.util.Locale.getDefault()).format(java.util.Date())
+                                        createDocumentLauncher.launch("symphonix_backup_$dateFmt.json")
+                                    }
+                                }
+                            } else {
+                                Toast.makeText(context, "Préparation de la sauvegarde...", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = SymphonixBlue)
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Sauvegarder", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    // Restore Button
+                    OutlinedButton(
+                        onClick = {
+                            openDocumentLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.2.dp, GlassEmeraldGreen)
+                    ) {
+                        Icon(Icons.Default.FileDownload, contentDescription = null, tint = GlassEmeraldGreen, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Restaurer", color = GlassEmeraldGreen, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // Section 6: Charte Graphique Officielle SYMPHONIX
         item {
             WaterDropCard(
                 accentGlow = SymphonixBlue,
@@ -534,5 +806,212 @@ fun ParametresScreen(
         item {
             Spacer(modifier = Modifier.height(70.dp))
         }
+    }
+
+    // PIN Configuration Dialog
+    if (showPinDialog) {
+        AlertDialog(
+            onDismissRequest = { showPinDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Lock, contentDescription = null, tint = SymphonixBlue)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (hasConfiguredPin) "Modifier le code PIN" else "Nouveau code PIN",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Choisissez un code secret de 4 à 6 chiffres pour sécuriser l'accès à la caisse :",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = GlassTextSecondary
+                    )
+
+                    OutlinedTextField(
+                        value = newPinInput,
+                        onValueChange = { if (it.length <= 6 && it.all { c -> c.isDigit() }) newPinInput = it },
+                        label = { Text("Code PIN (4-6 chiffres)") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = SymphonixBlue,
+                            unfocusedBorderColor = Color(0xFFCBD5E1)
+                        )
+                    )
+
+                    OutlinedTextField(
+                        value = confirmPinInput,
+                        onValueChange = { if (it.length <= 6 && it.all { c -> c.isDigit() }) confirmPinInput = it },
+                        label = { Text("Confirmer le code PIN") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = SymphonixBlue,
+                            unfocusedBorderColor = Color(0xFFCBD5E1)
+                        )
+                    )
+
+                    if (pinDialogError != null) {
+                        Text(
+                            text = pinDialogError!!,
+                            color = GlassCoralRed,
+                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (newPinInput.length < 4) {
+                            pinDialogError = "Le code doit comporter au moins 4 chiffres."
+                        } else if (newPinInput != confirmPinInput) {
+                            pinDialogError = "Les deux codes ne correspondent pas."
+                        } else {
+                            SecurityManager.savePin(context, newPinInput)
+                            hasConfiguredPin = true
+                            isPinSecurityActive = true
+                            showPinDialog = false
+                            Toast.makeText(context, "Code PIN enregistré et activé !", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = SymphonixBlue)
+                ) {
+                    Text("Valider", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPinDialog = false }) {
+                    Text("Annuler")
+                }
+            }
+        )
+    }
+
+    // Restore Confirmation Dialog
+    if (showRestoreDialog && pendingBackupData != null) {
+        val data = pendingBackupData!!
+        AlertDialog(
+            onDismissRequest = { showRestoreDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.FileDownload, contentDescription = null, tint = GlassEmeraldGreen)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Confirmer la restauration", fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Aperçu de la sauvegarde sélectionnée :", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Text("• Date d'export : ${data.summary.exportedAt}", fontSize = 12.sp, color = GlassTextSecondary)
+                    Text("• Sessions de caisse : ${data.summary.sessionsCount}", fontSize = 12.sp, color = GlassTextSecondary)
+                    Text("• Décaissements : ${data.summary.disbursementsCount}", fontSize = 12.sp, color = GlassTextSecondary)
+                    Text("• Total des dépenses : ${data.summary.totalDisbursed} DA", fontSize = 12.sp, color = GlassTextSecondary)
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                    Text("Mode de restauration :", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { restoreMode = RestoreMode.REPLACE }
+                    ) {
+                        RadioButton(
+                            selected = restoreMode == RestoreMode.REPLACE,
+                            onClick = { restoreMode = RestoreMode.REPLACE }
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Column {
+                            Text("Remplacer tout (Recommandé)", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text("Écrase la base actuelle et remet exactement cette sauvegarde", fontSize = 11.sp, color = GlassTextSecondary)
+                        }
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { restoreMode = RestoreMode.MERGE }
+                    ) {
+                        RadioButton(
+                            selected = restoreMode == RestoreMode.MERGE,
+                            onClick = { restoreMode = RestoreMode.MERGE }
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Column {
+                            Text("Fusionner les données", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text("Ajoute les sessions sans supprimer vos sessions locales", fontSize = 11.sp, color = GlassTextSecondary)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onRestoreBackup?.invoke(data, restoreMode) { result ->
+                            showRestoreDialog = false
+                            pendingBackupData = null
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = GlassEmeraldGreen)
+                ) {
+                    Text("Restaurer maintenant", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRestoreDialog = false }) {
+                    Text("Annuler")
+                }
+            }
+        )
+    }
+
+    // Update & Data Loss Info Dialog
+    if (showUpdateHelpDialog) {
+        AlertDialog(
+            onDismissRequest = { showUpdateHelpDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Info, contentDescription = null, tint = SymphonixBlue)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Mises à jour & Sécurité des Données", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Pourquoi Android demande parfois de désinstaller l'ancienne version ?",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = SymphonixDeepBlue
+                    )
+                    Text(
+                        text = "1. Signature APK : Si deux APK ont été compilés avec des clés différentes, Android bloque la mise à jour pour des raisons de sécurité du système.\n\n" +
+                               "2. Numéro de version (versionCode) : Chaque nouvelle mise à jour doit avoir un versionCode supérieur à l'actuel.\n\n" +
+                               "3. Solution infaillible : En utilisant le bouton « Sauvegarder », vous enregistrez un fichier JSON (sur Google Drive, WhatsApp ou vos Fichiers). En cas de mise à jour ou réinstallation, cliquez simplement sur « Restaurer » pour tout récupérer en 1 seconde !",
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp,
+                        color = GlassTextSecondary
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showUpdateHelpDialog = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = SymphonixBlue)
+                ) {
+                    Text("Compris", color = Color.White)
+                }
+            }
+        )
     }
 }

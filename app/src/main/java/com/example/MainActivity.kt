@@ -6,10 +6,23 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.CashScreen
 import com.example.ui.CashViewModel
+import com.example.ui.screens.SecurityLockScreen
+import com.example.ui.screens.SplashScreen
 import com.example.ui.theme.RecapCaisseTheme
+import com.example.util.SecurityManager
+
+enum class AppScreenState {
+    SPLASH,
+    LOCK,
+    MAIN
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -43,8 +56,33 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             RecapCaisseTheme {
+                val context = this
+                var screenState by remember { mutableStateOf(AppScreenState.SPLASH) }
                 val viewModel: CashViewModel = viewModel()
-                CashScreen(viewModel = viewModel)
+
+                when (screenState) {
+                    AppScreenState.SPLASH -> {
+                        SplashScreen(
+                            onSplashFinished = {
+                                if (SecurityManager.isSecurityEnabled(context)) {
+                                    screenState = AppScreenState.LOCK
+                                } else {
+                                    screenState = AppScreenState.MAIN
+                                }
+                            }
+                        )
+                    }
+                    AppScreenState.LOCK -> {
+                        SecurityLockScreen(
+                            onUnlocked = {
+                                screenState = AppScreenState.MAIN
+                            }
+                        )
+                    }
+                    AppScreenState.MAIN -> {
+                        CashScreen(viewModel = viewModel)
+                    }
+                }
             }
         }
     }

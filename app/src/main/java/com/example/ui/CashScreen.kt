@@ -332,7 +332,20 @@ fun CashScreen(
                                             initialFund = initialFund
                                         )
                                     },
-                                    onExportPdf = { viewModel.exportAndSharePdf() }
+                                    onExportPdf = { viewModel.exportAndSharePdf() },
+                                    onExportBackup = { callback ->
+                                        viewModel.exportBackup { json, intent ->
+                                            callback(json, intent)
+                                        }
+                                    },
+                                    onParseBackup = { json ->
+                                        viewModel.parseBackup(json)
+                                    },
+                                    onRestoreBackup = { data, mode, callback ->
+                                        viewModel.restoreBackup(data, mode) { result ->
+                                            callback(result)
+                                        }
+                                    }
                                 )
                             }
                         }

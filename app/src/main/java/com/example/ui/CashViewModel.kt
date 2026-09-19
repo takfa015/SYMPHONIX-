@@ -226,4 +226,47 @@ class CashViewModel(application: Application) : AndroidViewModel(application) {
             _uiEvent.emit(UiEvent.ShowToast("Session supprimée"))
         }
     }
+
+    fun exportBackup(onResult: (jsonString: String, shareIntent: android.content.Intent) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val sessions = repository.getAllSessionsDirect()
+                val json = com.example.util.CashBackupManager.exportToJson(sessions)
+                val intent = com.example.util.CashBackupManager.createShareIntent(getApplication(), json)
+                onResult(json, intent)
+                _uiEvent.emit(UiEvent.ShowToast("Sauvegarde exportée avec succès (${sessions.size} sessions)"))
+            } catch (e: Exception) {
+                _uiEvent.emit(UiEvent.ShowToast("Erreur d'export : ${e.localizedMessage}"))
+            }
+        }
+    }
+
+    fun parseBackup(jsonString: String): com.example.util.BackupData? {
+        return try {
+            com.example.util.CashBackupManager.parseBackup(jsonString)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun restoreBackup(
+        backupData: com.example.util.BackupData,
+        mode: com.example.util.RestoreMode,
+        onComplete: (com.example.util.RestoreResult) -> Unit
+    ) {
+        viewModelScope.launch {
+            val result = com.example.util.CashBackupManager.executeRestore(
+                dao = repository.cashDao,
+                backupData = backupData,
+                mode = mode
+            )
+            if (result.success) {
+                _selectedSessionId.value = null
+                _uiEvent.emit(UiEvent.ShowToast(result.message))
+            } else {
+                _uiEvent.emit(UiEvent.ShowToast(result.message))
+            }
+            onComplete(result)
+        }
+    }
 }

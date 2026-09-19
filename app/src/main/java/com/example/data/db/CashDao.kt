@@ -57,4 +57,24 @@ interface CashDao {
 
     @Query("SELECT COUNT(*) FROM disbursements WHERE sessionId = :sessionId")
     suspend fun getDisbursementCount(sessionId: Long): Int
+
+    // Backup & Restore
+    @Transaction
+    @Query("SELECT * FROM cash_sessions ORDER BY dateMillis ASC, id ASC")
+    suspend fun getAllSessionsWithDetailsDirect(): List<SessionWithDetails>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertReplenishments(replenishments: List<CashReplenishment>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDisbursements(disbursements: List<Disbursement>)
+
+    @Query("DELETE FROM cash_replenishments")
+    suspend fun clearAllReplenishments()
+
+    @Query("DELETE FROM disbursements")
+    suspend fun clearAllDisbursements()
+
+    @Query("DELETE FROM cash_sessions")
+    suspend fun clearAllSessions()
 }

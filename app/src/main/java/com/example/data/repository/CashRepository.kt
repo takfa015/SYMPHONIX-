@@ -12,7 +12,10 @@ import java.util.Locale
 
 class CashRepository(private val dao: CashDao) {
 
+    val cashDao: CashDao get() = dao
     val allSessions: Flow<List<SessionWithDetails>> = dao.getAllSessionsWithDetails()
+
+    suspend fun getAllSessionsDirect(): List<SessionWithDetails> = dao.getAllSessionsWithDetailsDirect()
 
     fun getSessionFlow(sessionId: Long): Flow<SessionWithDetails?> = dao.getSessionWithDetailsFlow(sessionId)
 
