@@ -45,8 +45,12 @@ object CashPdfGenerator {
         DecimalFormat("0.00", symbols)
     }
 
+    fun formatAmount(amountCents: Long, currency: String = "DA"): String {
+        return Money.format(amountCents, currency)
+    }
+
     fun formatAmount(amount: Double, currency: String = "DA"): String {
-        return "${decimalFormat.format(amount)} $currency"
+        return Money.format(Money.doubleToCents(amount), currency)
     }
 
     fun formatPercent(percent: Double): String {
@@ -452,6 +456,7 @@ object CashPdfGenerator {
         val rowAmtPaint = createPaint(Color.rgb(30, 41, 59), 7f, isBold = true, letterSpacing = 0.02f)
 
         details.replenishments.forEachIndexed { index, item ->
+            val isCancelled = item.isCancelled
             if (index % 2 == 1) {
                 val zebraPaint = Paint().apply {
                     color = Color.rgb(248, 250, 252)
@@ -460,13 +465,31 @@ object CashPdfGenerator {
                 canvas.drawRect(leftMargin, y, rightMargin, y + rowHeight, zebraPaint)
             }
 
-            canvas.drawText(String.format("%02d", item.orderNumber), colN, y + 10.5f, rowTextPaint)
-            canvas.drawText(item.time, colHeure, y + 10.5f, rowTextPaint)
-            canvas.drawText(item.reason, colMotif, y + 10.5f, rowTextPaint)
-            canvas.drawText(item.sourceLocation, colSource, y + 10.5f, rowTextPaint)
+            val rTextPaint = createPaint(
+                if (isCancelled) Color.rgb(148, 163, 184) else Color.rgb(30, 41, 59),
+                7f,
+                isBold = false,
+                letterSpacing = 0.015f
+            ).apply {
+                if (isCancelled) flags = flags or Paint.STRIKE_THRU_TEXT_FLAG
+            }
+            val rAmtPaint = createPaint(
+                if (isCancelled) Color.rgb(148, 163, 184) else Color.rgb(30, 41, 59),
+                7f,
+                isBold = !isCancelled,
+                letterSpacing = 0.02f
+            ).apply {
+                if (isCancelled) flags = flags or Paint.STRIKE_THRU_TEXT_FLAG
+            }
+
+            canvas.drawText(String.format("%02d", item.orderNumber), colN, y + 10.5f, rTextPaint)
+            canvas.drawText(item.time, colHeure, y + 10.5f, rTextPaint)
+            val reasonText = if (isCancelled) "[ANNULÉ] ${item.reason}" else item.reason
+            canvas.drawText(reasonText, colMotif, y + 10.5f, rTextPaint)
+            canvas.drawText(item.sourceLocation, colSource, y + 10.5f, rTextPaint)
 
             val amtText = formatAmount(item.amount, session.currency)
-            canvas.drawText(amtText, colMontant - rowAmtPaint.measureText(amtText), y + 10.5f, rowAmtPaint)
+            canvas.drawText(amtText, colMontant - rAmtPaint.measureText(amtText), y + 10.5f, rAmtPaint)
 
             canvas.drawLine(leftMargin, y + rowHeight, rightMargin, y + rowHeight, borderPaint)
             y += rowHeight
@@ -481,7 +504,12 @@ object CashPdfGenerator {
         canvas.drawRect(leftMargin, y, rightMargin, y + totalBarHeight, totalBg)
 
         val totalPaint = createPaint(Color.rgb(30, 58, 138), 7.2f, isBold = true, letterSpacing = 0.03f)
-        canvas.drawText("TOTAL DES ALIMENTATIONS ENTRÉES :", colMotif, y + 10f, totalPaint)
+        val replTotLabel = if (details.cancelledReplenishments.isNotEmpty()) {
+            "TOTAL DES ALIMENTATIONS ACTIVES (${details.activeReplenishments.size} entrées, ${details.cancelledReplenishments.size} annulée(s)) :"
+        } else {
+            "TOTAL DES ALIMENTATIONS ENTRÉES :"
+        }
+        canvas.drawText(replTotLabel, colMotif, y + 10f, totalPaint)
 
         val totalAmt = formatAmount(details.totalReplenishments, session.currency)
         canvas.drawText(totalAmt, colMontant - totalPaint.measureText(totalAmt), y + 10f, totalPaint)
@@ -563,6 +591,7 @@ object CashPdfGenerator {
         val partPaint = createPaint(Color.rgb(71, 85, 105), 7.2f, isBold = false, letterSpacing = 0.01f)
 
         details.disbursements.forEachIndexed { index, item ->
+            val isCancelled = item.isCancelled
             // Subtle alternating tint
             if (index % 2 == 1) {
                 val zebraPaint = Paint().apply {
@@ -572,20 +601,44 @@ object CashPdfGenerator {
                 canvas.drawRect(leftMargin, y, rightMargin, y + rowHeight, zebraPaint)
             }
 
+            val dTextPaint = createPaint(
+                if (isCancelled) Color.rgb(148, 163, 184) else Color.rgb(30, 41, 59),
+                7.5f,
+                isBold = false,
+                letterSpacing = 0.015f
+            ).apply {
+                if (isCancelled) flags = flags or Paint.STRIKE_THRU_TEXT_FLAG
+            }
+            val dAmtPaint = createPaint(
+                if (isCancelled) Color.rgb(148, 163, 184) else Color.rgb(15, 23, 42),
+                7.5f,
+                isBold = !isCancelled,
+                letterSpacing = 0.02f
+            ).apply {
+                if (isCancelled) flags = flags or Paint.STRIKE_THRU_TEXT_FLAG
+            }
+            val dPartPaint = createPaint(
+                if (isCancelled) Color.rgb(148, 163, 184) else Color.rgb(71, 85, 105),
+                7.2f,
+                isBold = false,
+                letterSpacing = 0.01f
+            )
+
             // N°
-            canvas.drawText(String.format("%02d", item.orderNumber), colN, y + 11.5f, textPaint)
+            canvas.drawText(String.format("%02d", item.orderNumber), colN, y + 11.5f, dTextPaint)
             // Heure
-            canvas.drawText(item.time, colHeure, y + 11.5f, textPaint)
+            canvas.drawText(item.time, colHeure, y + 11.5f, dTextPaint)
 
             // Désignation (Ellipsize if necessary to prevent overlap with Catégorie)
             val maxDesigWidth = (colCat - 6f) - colDesig
-            val safeDesig = ellipsizeText(item.designation, textPaint, maxDesigWidth)
-            canvas.drawText(safeDesig, colDesig, y + 11.5f, textPaint)
+            val rawDesig = if (isCancelled) "[ANNULÉ] ${item.designation}" else item.designation
+            val safeDesig = ellipsizeText(rawDesig, dTextPaint, maxDesigWidth)
+            canvas.drawText(safeDesig, colDesig, y + 11.5f, dTextPaint)
 
             // Catégorie Badge
-            val catText = item.fullCategory
+            val catText = if (isCancelled) "ANNULÉ" else item.fullCategory
             val catBadgePaint = createPaint(
-                if (item.parentCategory.contains("Personnel", true)) Color.rgb(30, 64, 175) else Color.rgb(6, 95, 70),
+                if (isCancelled) Color.rgb(153, 27, 27) else if (item.parentCategory.contains("Personnel", true)) Color.rgb(30, 64, 175) else Color.rgb(6, 95, 70),
                 6.8f,
                 isBold = true,
                 letterSpacing = 0.02f
@@ -593,7 +646,9 @@ object CashPdfGenerator {
             val catBadgeW = catBadgePaint.measureText(catText) + 8f
             val catPill = RectF(colCat - 3f, y + 3f, colCat + catBadgeW, y + rowHeight - 3f)
             val catPillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = if (item.parentCategory.contains("Personnel", true)) {
+                color = if (isCancelled) {
+                    Color.rgb(254, 226, 226) // soft red
+                } else if (item.parentCategory.contains("Personnel", true)) {
                     Color.rgb(219, 234, 254) // soft blue
                 } else {
                     Color.rgb(209, 250, 229) // soft emerald
@@ -605,12 +660,14 @@ object CashPdfGenerator {
 
             // Montant
             val amtStr = formatAmount(item.amount, session.currency)
-            canvas.drawText(amtStr, colMontant - amtPaint.measureText(amtStr), y + 11.5f, amtPaint)
+            canvas.drawText(amtStr, colMontant - dAmtPaint.measureText(amtStr), y + 11.5f, dAmtPaint)
 
             // Part %
-            val part = if (totalDecaisse > 0) (item.amount / totalDecaisse) * 100.0 else 0.0
-            val partStr = formatPercent(part)
-            canvas.drawText(partStr, colPart - partPaint.measureText(partStr), y + 11.5f, partPaint)
+            val partStr = if (isCancelled) "—" else {
+                val part = if (totalDecaisse > 0) (item.amount.toDouble() / totalDecaisse.toDouble()) * 100.0 else 0.0
+                formatPercent(part)
+            }
+            canvas.drawText(partStr, colPart - dPartPaint.measureText(partStr), y + 11.5f, dPartPaint)
 
             // Line separator
             canvas.drawLine(leftMargin, y + rowHeight, rightMargin, y + rowHeight, borderPaint)
@@ -626,8 +683,12 @@ object CashPdfGenerator {
         canvas.drawRect(leftMargin, y, rightMargin, y + totalRowHeight, totalRowBg)
 
         val totLabelPaint = createPaint(Color.rgb(15, 23, 42), 7.8f, isBold = true, letterSpacing = 0.03f)
-        val totalLabel = "TOTAL DES DÉCAISSEMENTS ENREGISTRÉS (${details.disbursements.size} OPÉRATIONS) :"
-        canvas.drawText(totalLabel, colCat - 36f, y + 12f, totLabelPaint)
+        val totalLabel = if (details.cancelledDisbursements.isNotEmpty()) {
+            "TOTAL DÉCAISSEMENTS ACTIFS (${details.activeDisbursements.size} OPÉRATIONS, ${details.cancelledDisbursements.size} ANNULÉE(S)) :"
+        } else {
+            "TOTAL DES DÉCAISSEMENTS ENREGISTRÉS (${details.disbursements.size} OPÉRATIONS) :"
+        }
+        canvas.drawText(totalLabel, colCat - 40f, y + 12f, totLabelPaint)
 
         val totAmtPaint = createPaint(Color.rgb(180, 83, 9), 7.8f, isBold = true, letterSpacing = 0.02f)
         val totalAmtStr = formatAmount(totalDecaisse, session.currency)
@@ -861,6 +922,12 @@ object CashPdfGenerator {
 
         canvas.drawText("VÉRIFIÉ & VALIDÉ PAR (${details.session.managerName.uppercase()}) :", rightX + 8f, startY + 12f, sigHeaderPaint)
         canvas.drawText("Signature & Cachet", rightX + 8f, startY + 40f, sigSubPaint)
+        // Integrity footprint badge line
+        val hashText = details.session.integrityHash?.take(12)?.uppercase() ?: "NON CLÔTURÉE"
+        val integrityText = "Empreinte SHA-256 : $hashText  |  Lignes annulées : ${details.totalCancelledCount}  |  Réouvertures : ${details.session.reopenCount}  |  Document avec empreinte d'intégrité"
+        val integPaint = createPaint(Color.rgb(100, 116, 139), 6.5f, isBold = false, letterSpacing = 0.015f)
+        val integW = integPaint.measureText(integrityText)
+        canvas.drawText(integrityText, (leftMargin + rightMargin) / 2f - integW / 2f, startY + height + 13f, integPaint)
     }
 
     private fun drawFooter(
@@ -876,7 +943,7 @@ object CashPdfGenerator {
         val left = "SYMPHONIX Caisse$sep${details.session.establishmentName}"
         canvas.drawText(left, leftMargin, y, footerPaint)
 
-        val center = "Arrêté du ${details.session.dateText}$sep${if (details.session.isClosed) "Clôture journalière" else "Session active"}"
+        val center = "Arrêté du ${details.session.dateText}$sep${if (details.session.isClosed) "Clôture avec empreinte d'intégrité" else "Session active"}"
         val centerW = footerPaint.measureText(center)
         val centerPos = (leftMargin + rightMargin) / 2f - centerW / 2f
         canvas.drawText(center, centerPos, y, footerPaint)

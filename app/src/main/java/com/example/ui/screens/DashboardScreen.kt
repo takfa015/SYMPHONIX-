@@ -119,13 +119,13 @@ fun DashboardScreen(
     val context = LocalContext.current
     val lowBalanceEnabled = remember { NotificationHelper.isLowBalanceAlertEnabled(context) }
     val lowBalanceThreshold = remember { NotificationHelper.getLowBalanceThreshold(context) }
-    val isLowBalance = lowBalanceEnabled && sessionDetails.theoreticalBalance < lowBalanceThreshold && !session.isClosed
+    val isLowBalance = lowBalanceEnabled && sessionDetails.theoreticalBalanceDouble < lowBalanceThreshold && !session.isClosed
 
     LaunchedEffect(isLowBalance) {
         if (isLowBalance) {
             NotificationHelper.sendLowBalanceNotification(
                 context,
-                sessionDetails.theoreticalBalance,
+                sessionDetails.theoreticalBalanceDouble,
                 lowBalanceThreshold,
                 currency
             )

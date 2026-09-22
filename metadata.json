@@ -1,6 +1,6 @@
 {
   "name": "SYMPHONIX Caisse",
-  "description": "Solution professionnelle de gestion de fond de roulement, décaissements, encaissements et récapitulatif comptable certifié avec export PDF.",
+  "description": "Solution professionnelle de gestion de fond de roulement, décaissements, encaissements et récapitulatif comptable avec empreinte d'intégrité avec export PDF.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

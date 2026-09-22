@@ -43,6 +43,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -88,6 +89,7 @@ import kotlinx.coroutines.flow.collectLatest
 @Composable
 fun CashScreen(
     viewModel: CashViewModel,
+    onFlagSecureChanged: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -95,18 +97,7 @@ fun CashScreen(
     val allSessions by viewModel.allSessions.collectAsStateWithLifecycle()
     val selectedSessionId by viewModel.selectedSessionId.collectAsStateWithLifecycle()
 
-    var selectedTab by remember { mutableStateOf(CashTab.DASHBOARD) }
-    var displayedTab by remember { mutableStateOf(CashTab.DASHBOARD) }
-    var isTabLoading by remember { mutableStateOf(false) }
-
-    LaunchedEffect(selectedTab) {
-        if (selectedTab != displayedTab) {
-            isTabLoading = true
-            kotlinx.coroutines.delay(160)
-            displayedTab = selectedTab
-            isTabLoading = false
-        }
-    }
+    var selectedTab by rememberSaveable { mutableStateOf(CashTab.DASHBOARD) }
 
     var showAddReplenishmentDialog by remember { mutableStateOf(false) }
     var showAddDisbursementDialog by remember { mutableStateOf(false) }
@@ -265,7 +256,7 @@ fun CashScreen(
                         .widthIn(max = 680.dp)
                 ) {
                     AnimatedContent(
-                        targetState = displayedTab,
+                        targetState = selectedTab,
                         transitionSpec = {
                             val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
                             (slideInHorizontally(
@@ -334,6 +325,7 @@ fun CashScreen(
                             CashTab.PARAMETRES -> {
                                 ParametresScreen(
                                     sessionDetails = currentSession,
+                                    onFlagSecureChanged = onFlagSecureChanged,
                                     onSaveSettings = { establishmentName, establishmentSubTitle, responsibleName, managerName, currency, initialFund ->
                                         viewModel.updateSettings(
                                             establishmentName = establishmentName,
@@ -359,42 +351,6 @@ fun CashScreen(
                                         }
                                     }
                                 )
-                            }
-                        }
-                    }
-
-                    // Fluid loading transition indicator between pages
-                    if (isTabLoading) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(Color(0x33F8FAFC)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(20.dp))
-                                    .background(Color(0xF5FFFFFF))
-                                    .border(1.dp, SymphonixBlue.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
-                                    .padding(horizontal = 24.dp, vertical = 18.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(32.dp),
-                                        color = SymphonixBlue,
-                                        strokeWidth = 3.dp
-                                    )
-                                    Text(
-                                        text = "Chargement de ${selectedTab.title}...",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color = SymphonixDeepBlue
-                                    )
-                                }
                             }
                         }
                     }
@@ -433,7 +389,7 @@ fun CashScreen(
     if (showCloseCashDialog) {
         currentSession?.let { details ->
             CloseCashDialog(
-                theoreticalBalance = details.theoreticalBalance,
+                theoreticalBalance = details.theoreticalBalanceDouble,
                 currency = details.session.currency,
                 onDismiss = { showCloseCashDialog = false },
                 onConfirm = { countedCash, closingTime ->
@@ -445,7 +401,7 @@ fun CashScreen(
     }
 
     if (showNewSessionDialog) {
-        val lastBalance = currentSession?.theoreticalBalance ?: 150000.0
+        val lastBalance = currentSession?.theoreticalBalanceDouble ?: 150000.0
         val curr = currentSession?.session?.currency ?: "DA"
         NewSessionDialog(
             lastTheoreticalBalance = lastBalance,

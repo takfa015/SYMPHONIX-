@@ -55,6 +55,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
@@ -63,8 +64,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.GlassBorderBottom
@@ -81,6 +88,7 @@ import com.example.ui.theme.GlassWhiteCard
 import com.example.ui.theme.SymphonixBlue
 import com.example.ui.theme.SymphonixDeepBlue
 import com.example.ui.theme.SymphonixLightBlue
+import com.example.util.AnimationSettings
 
 /**
  * Navigation tabs matching the app structure
@@ -99,96 +107,107 @@ enum class CashTab(
 }
 
 /**
- * Dynamic organic liquid water droplet background with smooth breathing wave animations,
- * optimized with drawBehind to avoid recomposition overhead and guarantee 120 FPS fluidity.
+ * Dynamic organic liquid water droplet background with smooth breathing wave animations.
+ * Refactored to separate background into its own Box with graphicsLayer (cached drawing)
+ * and content as sibling on top, preventing full screen recomposition every frame.
+ * Includes static fallback if Power Save Mode, Low RAM device, or system animation scale = 0.
  */
 @Composable
 fun WaterDropletBackground(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "waterInfinite")
+    val context = LocalContext.current
+    val animationsActive = remember(context) {
+        AnimationSettings.areAnimationsEnabled(context)
+    }
 
-    val animProgress by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 6500, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "animProgress"
-    )
+    val animProgress = if (animationsActive) {
+        val infiniteTransition = rememberInfiniteTransition(label = "waterInfinite")
+        val progress by infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 6500, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "animProgress"
+        )
+        progress
+    } else {
+        0.5f // Static peaceful state
+    }
 
     Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFFF1F8FB),
-                        Color(0xFFEBF5FA),
-                        Color(0xFFF0FDF8),
-                        Color(0xFFF8FAFC)
-                    )
-                )
-            )
-            .drawBehind {
-                val width = size.width
-                val height = size.height
-                val angle = animProgress * 2f * Math.PI.toFloat()
-                val pulse1 = 1f + 0.06f * kotlin.math.sin(angle)
-                val pulse2 = 1f + 0.06f * kotlin.math.cos(angle)
-                val waveOffset = 20f * kotlin.math.sin(angle)
-
-                // Organic Water Drop 1 (Top right - Cyan Blue)
-                val r1 = width * 0.55f * pulse1
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(Color(0x3538BDF8), Color(0x1438BDF8), Color.Transparent),
-                        center = Offset(width * 0.85f, height * 0.12f + waveOffset * 0.3f),
-                        radius = r1
-                    ),
-                    center = Offset(width * 0.85f, height * 0.12f + waveOffset * 0.3f),
-                    radius = r1
-                )
-
-                // Organic Water Drop 2 (Middle left - Emerald Green)
-                val r2 = width * 0.6f * pulse2
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(Color(0x2C34D399), Color(0x0E34D399), Color.Transparent),
-                        center = Offset(width * 0.1f, height * 0.42f - waveOffset * 0.2f),
-                        radius = r2
-                    ),
-                    center = Offset(width * 0.1f, height * 0.42f - waveOffset * 0.2f),
-                    radius = r2
-                )
-
-                // Organic Water Drop 3 (Bottom right - Soft Rose / Coral)
-                val r3 = width * 0.5f * pulse1
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(Color(0x20F43F5E), Color(0x08F43F5E), Color.Transparent),
-                        center = Offset(width * 0.9f, height * 0.75f + waveOffset * 0.4f),
-                        radius = r3
-                    ),
-                    center = Offset(width * 0.9f, height * 0.75f + waveOffset * 0.4f),
-                    radius = r3
-                )
-
-                // Organic Water Drop 4 (Symphonix Blue Top Left ambient reflection)
-                val r4 = width * 0.45f * pulse2
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(Color(0x1F146BFF), Color(0x06146BFF), Color.Transparent),
-                        center = Offset(width * 0.15f, height * 0.08f),
-                        radius = r4
-                    ),
-                    center = Offset(width * 0.15f, height * 0.08f),
-                    radius = r4
-                )
-            }
+        modifier = modifier.fillMaxSize()
     ) {
+        // Dedicated Background Box with graphicsLayer isolating background invalidations
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer()
+                .background(
+                    remember {
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color(0xFFF1F8FB),
+                                Color(0xFFEBF5FA),
+                                Color(0xFFF0FDF8),
+                                Color(0xFFF8FAFC)
+                            )
+                        )
+                    }
+                )
+                .drawWithCache {
+                    val width = size.width
+                    val height = size.height
+                    val angle = animProgress * 2f * Math.PI.toFloat()
+                    val pulse1 = 1f + 0.06f * kotlin.math.sin(angle)
+                    val pulse2 = 1f + 0.06f * kotlin.math.cos(angle)
+                    val waveOffset = 20f * kotlin.math.sin(angle)
+
+                    val r1 = width * 0.55f * pulse1
+                    val c1 = Offset(width * 0.85f, height * 0.12f + waveOffset * 0.3f)
+                    val brush1 = Brush.radialGradient(
+                        colors = listOf(Color(0x3538BDF8), Color(0x1438BDF8), Color.Transparent),
+                        center = c1,
+                        radius = r1
+                    )
+
+                    val r2 = width * 0.6f * pulse2
+                    val c2 = Offset(width * 0.1f, height * 0.42f - waveOffset * 0.2f)
+                    val brush2 = Brush.radialGradient(
+                        colors = listOf(Color(0x2C34D399), Color(0x0E34D399), Color.Transparent),
+                        center = c2,
+                        radius = r2
+                    )
+
+                    val r3 = width * 0.5f * pulse1
+                    val c3 = Offset(width * 0.9f, height * 0.75f + waveOffset * 0.4f)
+                    val brush3 = Brush.radialGradient(
+                        colors = listOf(Color(0x20F43F5E), Color(0x08F43F5E), Color.Transparent),
+                        center = c3,
+                        radius = r3
+                    )
+
+                    val r4 = width * 0.45f * pulse2
+                    val c4 = Offset(width * 0.15f, height * 0.08f)
+                    val brush4 = Brush.radialGradient(
+                        colors = listOf(Color(0x1F146BFF), Color(0x06146BFF), Color.Transparent),
+                        center = c4,
+                        radius = r4
+                    )
+
+                    onDrawBehind {
+                        drawCircle(brush = brush1, center = c1, radius = r1)
+                        drawCircle(brush = brush2, center = c2, radius = r2)
+                        drawCircle(brush = brush3, center = c3, radius = r3)
+                        drawCircle(brush = brush4, center = c4, radius = r4)
+                    }
+                }
+        )
+
+        // Sibling content placed above the isolated background layer
         content()
     }
 }
@@ -196,6 +215,7 @@ fun WaterDropletBackground(
 /**
  * Ultra-clear water droplet glass card with spring physics on press, specular highlights
  * and curved refraction borders.
+ * Optimized with graphicsLayer for elevation/shadow, remembered borderBrush, and accessibility semantics.
  */
 @Composable
 fun WaterDropCard(
@@ -207,7 +227,7 @@ fun WaterDropCard(
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val shape = RoundedCornerShape(cornerRadius)
+    val shape = remember(cornerRadius) { RoundedCornerShape(cornerRadius) }
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
 
@@ -218,43 +238,48 @@ fun WaterDropCard(
     )
 
     val elevation by animateDpAsState(
-        targetValue = if (isPressed && onClick != null) 2.dp else 6.dp,
+        targetValue = if (isPressed && onClick != null) 2.dp else 5.dp,
         animationSpec = spring(dampingRatio = 0.75f, stiffness = 450f),
         label = "cardElevation"
     )
 
-    val borderBrush = Brush.linearGradient(
-        colors = listOf(
-            accentGlow?.copy(alpha = 0.6f) ?: GlassBorderTop,
-            GlassPureWhite.copy(alpha = 0.85f),
-            GlassBorderBottom
-        ),
-        start = Offset(0f, 0f),
-        end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
-    )
+    val borderBrush = remember(accentGlow) {
+        Brush.linearGradient(
+            colors = listOf(
+                accentGlow?.copy(alpha = 0.6f) ?: GlassBorderTop,
+                GlassPureWhite.copy(alpha = 0.85f),
+                GlassBorderBottom
+            ),
+            start = Offset(0f, 0f),
+            end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+        )
+    }
+
+    val density = LocalDensity.current
 
     Box(
         modifier = modifier
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
+                shadowElevation = with(density) { elevation.toPx() }
+                this.shape = shape
+                clip = false
+                ambientShadowColor = accentGlow?.copy(alpha = 0.2f) ?: Color(0x140F172A)
+                spotShadowColor = accentGlow?.copy(alpha = 0.3f) ?: Color(0x1F000000)
             }
-            .shadow(
-                elevation = elevation,
-                shape = shape,
-                ambientColor = accentGlow?.copy(alpha = 0.2f) ?: Color(0x140F172A),
-                spotColor = accentGlow?.copy(alpha = 0.3f) ?: Color(0x1F000000)
-            )
             .clip(shape)
             .background(containerColor)
             .border(borderWidth, borderBrush, shape)
             .then(
                 if (onClick != null) {
-                    Modifier.clickable(
-                        interactionSource = interactionSource,
-                        indication = null,
-                        onClick = onClick
-                    )
+                    Modifier
+                        .semantics { role = Role.Button }
+                        .clickable(
+                            interactionSource = interactionSource,
+                            indication = null,
+                            onClick = onClick
+                        )
                 } else Modifier
             )
     ) {
@@ -264,12 +289,14 @@ fun WaterDropCard(
                 .fillMaxWidth()
                 .height(cornerRadius * 1.2f)
                 .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            GlassPureWhite.copy(alpha = 0.55f),
-                            Color.Transparent
+                    remember {
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                GlassPureWhite.copy(alpha = 0.55f),
+                                Color.Transparent
+                            )
                         )
-                    )
+                    }
                 )
         )
 
@@ -334,9 +361,9 @@ fun GlassBottomNavBar(
             ) {
                 val itemWidth = maxWidth / tabs.size
 
-                // Liquid bubble that slides smoothly between tabs
-                val animatedBubbleX by animateDpAsState(
-                    targetValue = itemWidth * selectedTab.ordinal,
+                // Liquid bubble that slides smoothly between tabs without recomposition
+                val bubbleProgress by animateFloatAsState(
+                    targetValue = selectedTab.ordinal.toFloat(),
                     animationSpec = spring(
                         dampingRatio = 0.74f,
                         stiffness = 380f
@@ -350,10 +377,16 @@ fun GlassBottomNavBar(
                     label = "bubbleColor"
                 )
 
-                // The sliding active bubble pill
+                // The sliding active bubble pill using Modifier.offset { IntOffset(...) } (lambda)
                 Box(
                     modifier = Modifier
-                        .offset(x = animatedBubbleX)
+                        .offset {
+                            val stepPx = itemWidth.toPx()
+                            IntOffset(
+                                x = (bubbleProgress * stepPx).toInt(),
+                                y = 0
+                            )
+                        }
                         .width(itemWidth)
                         .fillMaxHeight()
                         .padding(horizontal = 2.dp, vertical = 2.dp)

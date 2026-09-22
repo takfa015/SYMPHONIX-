@@ -57,6 +57,10 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Timer
+import com.example.ui.dialogs.SensitiveActionPinDialog
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -135,6 +139,7 @@ fun ParametresScreen(
     onExportBackup: ((onReady: (String, android.content.Intent) -> Unit) -> Unit)? = null,
     onParseBackup: ((String) -> BackupData?)? = null,
     onRestoreBackup: ((BackupData, RestoreMode, (RestoreResult) -> Unit) -> Unit)? = null,
+    onFlagSecureChanged: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val currentSession = sessionDetails?.session
@@ -165,15 +170,28 @@ fun ParametresScreen(
     var autoWatermark by remember { mutableStateOf(true) }
     var selectedReportLanguage by remember { mutableStateOf("Français (Officiel)") }
     var soundFeedback by remember { mutableStateOf(true) }
+    var selectedAnimationMode by remember { mutableStateOf(com.example.util.AnimationSettings.getAnimationMode(context)) }
     var showResetConfirmation by remember { mutableStateOf(false) }
 
-    // PIN Security state
+    // PIN & Keystore Security state
     var isPinSecurityActive by remember { mutableStateOf(SecurityManager.isSecurityEnabled(context)) }
     var hasConfiguredPin by remember { mutableStateOf(SecurityManager.isPinConfigured(context)) }
+    var isBiometricActive by remember { mutableStateOf(SecurityManager.isBiometricEnabled(context)) }
+    val isBiometricSupported = remember { SecurityManager.isBiometricSupported(context) }
+    var selectedAutoLockDelay by remember { mutableStateOf(SecurityManager.getAutoLockDelayMs(context)) }
+    var isFlagSecureActive by remember { mutableStateOf(SecurityManager.isFlagSecureEnabled(context)) }
     var showPinDialog by remember { mutableStateOf(false) }
     var newPinInput by remember { mutableStateOf("") }
     var confirmPinInput by remember { mutableStateOf("") }
     var pinDialogError by remember { mutableStateOf<String?>(null) }
+    var showRationaleNotifDialog by remember { mutableStateOf(false) }
+
+    // Sensitive action verification state
+    var showSensitivePinDialog by remember { mutableStateOf(false) }
+    var sensitiveActionTitle by remember { mutableStateOf("") }
+    var sensitiveActionDescription by remember { mutableStateOf("") }
+    var sensitiveActionIsDestructive by remember { mutableStateOf(false) }
+    var pendingSensitiveAction by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     // Backup & Restore state
     var showRestoreDialog by remember { mutableStateOf(false) }
@@ -453,7 +471,8 @@ fun ParametresScreen(
 
                 Button(
                     onClick = {
-                        val fund = initialFundText.toDoubleOrNull() ?: (currentSession?.initialFund ?: 150000.0)
+                        val defaultFund = currentSession?.let { com.example.util.Money.centsToDouble(it.initialFund) } ?: 150000.0
+                        val fund = initialFundText.toDoubleOrNull() ?: defaultFund
                         onSaveSettings(
                             establishmentName,
                             establishmentSubTitle,
@@ -736,7 +755,7 @@ fun ParametresScreen(
                             NotificationHelper.setClosingReminderEnabled(context, enabled)
                             if (enabled) {
                                 if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
-                                    requestNotifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                    showRationaleNotifDialog = true
                                 } else {
                                     NotificationHelper.scheduleDailyClosingReminder(context, closingReminderTime)
                                 }
@@ -812,7 +831,7 @@ fun ParametresScreen(
                             lowBalanceEnabled = enabled
                             NotificationHelper.setLowBalanceAlertEnabled(context, enabled)
                             if (enabled && !NotificationManagerCompat.from(context).areNotificationsEnabled()) {
-                                requestNotifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                showRationaleNotifDialog = true
                             }
                         },
                         colors = SwitchDefaults.colors(checkedThumbColor = SymphonixBlue, checkedTrackColor = SymphonixLightBlue)
@@ -849,7 +868,7 @@ fun ParametresScreen(
                 OutlinedButton(
                     onClick = {
                         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
-                            requestNotifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            showRationaleNotifDialog = true
                         } else {
                             NotificationHelper.sendTestNotification(context)
                             Toast.makeText(context, "Notification test envoyée !", Toast.LENGTH_SHORT).show()
@@ -1122,10 +1141,48 @@ fun ParametresScreen(
                         )
                     }
                 }
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Text(
+                    text = "Fond d'écran animé & Effets visuels :",
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                    color = GlassTextSecondary
+                )
+                Text(
+                    text = "Gouttes liquides réactives. S'adaptent automatiquement au mode économie d'énergie.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = GlassTextMuted
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    com.example.util.AnimationMode.values().forEach { mode ->
+                        val isSelected = selectedAnimationMode == mode
+                        val labelText = when (mode) {
+                            com.example.util.AnimationMode.AUTO -> "Auto"
+                            com.example.util.AnimationMode.ENABLED -> "Activées"
+                            com.example.util.AnimationMode.DISABLED -> "Désactivées"
+                        }
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = {
+                                selectedAnimationMode = mode
+                                com.example.util.AnimationSettings.setAnimationMode(context, mode)
+                                Toast.makeText(context, "Animation du fond : $labelText", Toast.LENGTH_SHORT).show()
+                            },
+                            label = { Text(labelText) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = GlassEmeraldGreenBg,
+                                selectedLabelColor = GlassEmeraldGreen
+                            )
+                        )
+                    }
+                }
             }
         }
-
-        // Section 4: Sécurité & Code d'Accès
         item {
             WaterDropCard(
                 accentGlow = SymphonixBlue,
@@ -1133,21 +1190,29 @@ fun ParametresScreen(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = Icons.Default.Lock,
+                        imageVector = Icons.Default.Shield,
                         contentDescription = null,
                         tint = SymphonixBlue,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(22.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Sécurité & Contrôle d'Accès",
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                        color = SymphonixDeepBlue
-                    )
+                    Column {
+                        Text(
+                            text = "Sécurité & Contrôle d'Accès",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = SymphonixDeepBlue
+                        )
+                        Text(
+                            text = "Chiffrement Keystore AES-GCM • PBKDF2 120k",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = GlassTextMuted
+                        )
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
+                // Toggle 1: Verrouillage par code PIN
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1160,7 +1225,7 @@ fun ParametresScreen(
                             color = GlassTextPrimary
                         )
                         Text(
-                            text = if (hasConfiguredPin) "Code PIN configuré et actif au démarrage" else "Exige un mot de passe ou code PIN pour ouvrir l'application",
+                            text = if (hasConfiguredPin) "Code PIN actif (6 chiffres minimum)" else "Exige un code PIN pour ouvrir l'application et valider les actions sensibles",
                             style = MaterialTheme.typography.bodySmall,
                             color = GlassTextSecondary
                         )
@@ -1170,6 +1235,9 @@ fun ParametresScreen(
                         onCheckedChange = { checked ->
                             if (checked) {
                                 if (!hasConfiguredPin) {
+                                    newPinInput = ""
+                                    confirmPinInput = ""
+                                    pinDialogError = null
                                     showPinDialog = true
                                 } else {
                                     SecurityManager.setSecurityEnabled(context, true)
@@ -1177,9 +1245,20 @@ fun ParametresScreen(
                                     Toast.makeText(context, "Verrouillage par code PIN activé", Toast.LENGTH_SHORT).show()
                                 }
                             } else {
-                                SecurityManager.setSecurityEnabled(context, false)
-                                isPinSecurityActive = false
-                                Toast.makeText(context, "Verrouillage désactivé", Toast.LENGTH_SHORT).show()
+                                if (hasConfiguredPin) {
+                                    sensitiveActionTitle = "Désactivation du code PIN"
+                                    sensitiveActionDescription = "Saisissez votre code PIN actuel pour désactiver la protection de la caisse."
+                                    sensitiveActionIsDestructive = true
+                                    pendingSensitiveAction = {
+                                        SecurityManager.setSecurityEnabled(context, false)
+                                        isPinSecurityActive = false
+                                        Toast.makeText(context, "Verrouillage désactivé", Toast.LENGTH_SHORT).show()
+                                    }
+                                    showSensitivePinDialog = true
+                                } else {
+                                    SecurityManager.setSecurityEnabled(context, false)
+                                    isPinSecurityActive = false
+                                }
                             }
                         },
                         colors = SwitchDefaults.colors(
@@ -1189,7 +1268,7 @@ fun ParametresScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1200,7 +1279,17 @@ fun ParametresScreen(
                             newPinInput = ""
                             confirmPinInput = ""
                             pinDialogError = null
-                            showPinDialog = true
+                            if (hasConfiguredPin) {
+                                sensitiveActionTitle = "Modifier le code PIN"
+                                sensitiveActionDescription = "Confirmez votre identité avant de définir un nouveau code secret."
+                                sensitiveActionIsDestructive = false
+                                pendingSensitiveAction = {
+                                    showPinDialog = true
+                                }
+                                showSensitivePinDialog = true
+                            } else {
+                                showPinDialog = true
+                            }
                         },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp)
@@ -1208,9 +1297,9 @@ fun ParametresScreen(
                         Icon(Icons.Default.Security, contentDescription = null, tint = SymphonixBlue, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (hasConfiguredPin) "Modifier le code PIN" else "Définir un code PIN",
+                            text = if (hasConfiguredPin) "Modifier le PIN" else "Créer un code PIN (6+)",
                             color = SymphonixBlue,
-                            fontSize = 13.sp,
+                            fontSize = 12.5.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
@@ -1218,10 +1307,17 @@ fun ParametresScreen(
                     if (hasConfiguredPin) {
                         TextButton(
                             onClick = {
-                                SecurityManager.removePin(context)
-                                hasConfiguredPin = false
-                                isPinSecurityActive = false
-                                Toast.makeText(context, "Code PIN supprimé", Toast.LENGTH_SHORT).show()
+                                sensitiveActionTitle = "Suppression du code PIN"
+                                sensitiveActionDescription = "Attention : la suppression du code PIN désactivera toute protection de la caisse."
+                                sensitiveActionIsDestructive = true
+                                pendingSensitiveAction = {
+                                    SecurityManager.removePin(context)
+                                    hasConfiguredPin = false
+                                    isPinSecurityActive = false
+                                    isBiometricActive = false
+                                    Toast.makeText(context, "Code PIN et biométrie supprimés", Toast.LENGTH_SHORT).show()
+                                }
+                                showSensitivePinDialog = true
                             }
                         ) {
                             Text(
@@ -1232,6 +1328,148 @@ fun ParametresScreen(
                             )
                         }
                     }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = Color(0x1F000000))
+
+                // Toggle 2: Biométrie (BiometricPrompt)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Fingerprint, contentDescription = null, tint = SymphonixBlue, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Déverrouillage biométrique",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = GlassTextPrimary
+                            )
+                        }
+                        Text(
+                            text = if (!isBiometricSupported) "Capteur biométrique non configuré ou non disponible sur cet appareil"
+                                   else "Déverrouille rapidement la caisse avec votre empreinte digitale ou visage (repli PIN garanti)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = GlassTextSecondary
+                        )
+                    }
+                    Switch(
+                        checked = isBiometricActive && isBiometricSupported,
+                        enabled = isBiometricSupported && hasConfiguredPin,
+                        onCheckedChange = { checked ->
+                            SecurityManager.setBiometricEnabled(context, checked)
+                            isBiometricActive = checked
+                            Toast.makeText(
+                                context,
+                                if (checked) "Biométrie activée pour le déverrouillage" else "Biométrie désactivée",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = SymphonixBlue,
+                            checkedTrackColor = SymphonixLightBlue
+                        )
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = Color(0x1F000000))
+
+                // Option 3: Délai d'auto-verrouillage en arrière-plan
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Timer, contentDescription = null, tint = SymphonixBlue, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Auto-verrouillage en arrière-plan",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = GlassTextPrimary
+                        )
+                    }
+                    Text(
+                        text = "Reverrouille automatiquement la caisse si l'application reste en arrière-plan plus de :",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = GlassTextSecondary
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    val delays = listOf(
+                        0L to "Immédiat",
+                        30_000L to "30 s",
+                        60_000L to "1 min (défaut)",
+                        300_000L to "5 min"
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        delays.forEach { (delayMs, label) ->
+                            val isSelected = selectedAutoLockDelay == delayMs
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (isSelected) SymphonixBlue else Color(0xFFF1F5F9))
+                                    .border(1.dp, if (isSelected) SymphonixBlue else Color(0xFFCBD5E1), RoundedCornerShape(10.dp))
+                                    .clickable {
+                                        selectedAutoLockDelay = delayMs
+                                        SecurityManager.setAutoLockDelayMs(context, delayMs)
+                                        Toast.makeText(context, "Délai réglé sur : $label", Toast.LENGTH_SHORT).show()
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 7.dp)
+                            ) {
+                                Text(
+                                    text = label,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isSelected) Color.White else Color(0xFF1E293B)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = Color(0x1F000000))
+
+                // Toggle 4: Protection anti-capture FLAG_SECURE
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Protection anti-capture (FLAG_SECURE)",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = GlassTextPrimary
+                        )
+                        Text(
+                            text = "Empêche les captures d'écran et masque l'aperçu de la caisse dans la vue multitâche",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = GlassTextSecondary
+                        )
+                    }
+                    Switch(
+                        checked = isFlagSecureActive,
+                        onCheckedChange = { checked ->
+                            isFlagSecureActive = checked
+                            SecurityManager.setFlagSecureEnabled(context, checked)
+                            onFlagSecureChanged()
+                            Toast.makeText(
+                                context,
+                                if (checked) "Protection anti-capture activée" else "Protection anti-capture désactivée",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = SymphonixBlue,
+                            checkedTrackColor = SymphonixLightBlue
+                        )
+                    )
                 }
             }
         }
@@ -1288,19 +1526,31 @@ fun ParametresScreen(
                     // Export Button
                     Button(
                         onClick = {
-                            if (onExportBackup != null) {
-                                onExportBackup { jsonString, shareIntent ->
-                                    lastExportedJson = jsonString
-                                    try {
-                                        context.startActivity(shareIntent)
-                                    } catch (_: Exception) {
-                                        // Fallback to direct document creation
-                                        val dateFmt = java.text.SimpleDateFormat("yyyyMMdd_HHmm", java.util.Locale.getDefault()).format(java.util.Date())
-                                        createDocumentLauncher.launch("symphonix_backup_$dateFmt.json")
+                            val executeExport = {
+                                if (onExportBackup != null) {
+                                    onExportBackup { jsonString, shareIntent ->
+                                        lastExportedJson = jsonString
+                                        try {
+                                            context.startActivity(shareIntent)
+                                        } catch (_: Exception) {
+                                            // Fallback to direct document creation
+                                            val dateFmt = java.text.SimpleDateFormat("yyyyMMdd_HHmm", java.util.Locale.getDefault()).format(java.util.Date())
+                                            createDocumentLauncher.launch("symphonix_backup_$dateFmt.json")
+                                        }
                                     }
+                                } else {
+                                    Toast.makeText(context, "Préparation de la sauvegarde...", Toast.LENGTH_SHORT).show()
                                 }
+                            }
+
+                            if (SecurityManager.isSecurityEnabled(context) && hasConfiguredPin) {
+                                sensitiveActionTitle = "Exportation sécurisée"
+                                sensitiveActionDescription = "Confirmez votre code PIN pour exporter les données de caisse complètes."
+                                sensitiveActionIsDestructive = false
+                                pendingSensitiveAction = executeExport
+                                showSensitivePinDialog = true
                             } else {
-                                Toast.makeText(context, "Préparation de la sauvegarde...", Toast.LENGTH_SHORT).show()
+                                executeExport()
                             }
                         },
                         modifier = Modifier.weight(1f),
@@ -1369,7 +1619,7 @@ fun ParametresScreen(
         }
     }
 
-    // PIN Configuration Dialog
+    // PIN Configuration Dialog (PBKDF2 120k + Keystore AES-GCM, 6 digits minimum)
     if (showPinDialog) {
         AlertDialog(
             onDismissRequest = { showPinDialog = false },
@@ -1378,7 +1628,7 @@ fun ParametresScreen(
                     Icon(Icons.Default.Lock, contentDescription = null, tint = SymphonixBlue)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (hasConfiguredPin) "Modifier le code PIN" else "Nouveau code PIN",
+                        text = if (hasConfiguredPin) "Modifier le code PIN" else "Nouveau code PIN (6+ chiffres)",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                     )
                 }
@@ -1386,15 +1636,20 @@ fun ParametresScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "Choisissez un code secret de 4 à 6 chiffres pour sécuriser l'accès à la caisse :",
+                        text = "Choisissez un code secret de 6 chiffres minimum pour sécuriser l'accès à la caisse et aux opérations sensibles :",
                         style = MaterialTheme.typography.bodySmall,
                         color = GlassTextSecondary
+                    )
+                    Text(
+                        text = "🔒 Protection PBKDF2 (120 000 itérations) & Chiffrement matériel Keystore AES-GCM.",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                        color = SymphonixBlue
                     )
 
                     OutlinedTextField(
                         value = newPinInput,
-                        onValueChange = { if (it.length <= 6 && it.all { c -> c.isDigit() }) newPinInput = it },
-                        label = { Text("Code PIN (4-6 chiffres)") },
+                        onValueChange = { if (it.length <= 12 && it.all { c -> c.isDigit() }) newPinInput = it },
+                        label = { Text("Code PIN (6 chiffres min)") },
                         visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                         modifier = Modifier.fillMaxWidth(),
@@ -1407,7 +1662,7 @@ fun ParametresScreen(
 
                     OutlinedTextField(
                         value = confirmPinInput,
-                        onValueChange = { if (it.length <= 6 && it.all { c -> c.isDigit() }) confirmPinInput = it },
+                        onValueChange = { if (it.length <= 12 && it.all { c -> c.isDigit() }) confirmPinInput = it },
                         label = { Text("Confirmer le code PIN") },
                         visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
@@ -1431,8 +1686,8 @@ fun ParametresScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        if (newPinInput.length < 4) {
-                            pinDialogError = "Le code doit comporter au moins 4 chiffres."
+                        if (newPinInput.length < SecurityManager.MIN_PIN_LENGTH) {
+                            pinDialogError = "Le code PIN doit comporter au moins ${SecurityManager.MIN_PIN_LENGTH} chiffres."
                         } else if (newPinInput != confirmPinInput) {
                             pinDialogError = "Les deux codes ne correspondent pas."
                         } else {
@@ -1440,7 +1695,7 @@ fun ParametresScreen(
                             hasConfiguredPin = true
                             isPinSecurityActive = true
                             showPinDialog = false
-                            Toast.makeText(context, "Code PIN enregistré et activé !", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Code PIN sécurisé enregistré et activé !", Toast.LENGTH_SHORT).show()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = SymphonixBlue)
@@ -1518,9 +1773,21 @@ fun ParametresScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        onRestoreBackup?.invoke(data, restoreMode) { result ->
-                            showRestoreDialog = false
-                            pendingBackupData = null
+                        val executeRestore = {
+                            onRestoreBackup?.invoke(data, restoreMode) { result ->
+                                showRestoreDialog = false
+                                pendingBackupData = null
+                            }
+                        }
+
+                        if (restoreMode == RestoreMode.REPLACE && SecurityManager.isSecurityEnabled(context) && hasConfiguredPin) {
+                            sensitiveActionTitle = "Restauration destructive (Remplacement)"
+                            sensitiveActionDescription = "Toutes les sessions de caisse actuelles seront écrasées. Saisissez votre code PIN pour valider."
+                            sensitiveActionIsDestructive = true
+                            pendingSensitiveAction = { executeRestore() }
+                            showSensitivePinDialog = true
+                        } else {
+                            executeRestore()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = GlassEmeraldGreen)
@@ -1765,6 +2032,84 @@ fun ParametresScreen(
                 ) {
                     Text("Compris", color = Color.White)
                 }
+            }
+        )
+    }
+
+    // Educational Notification Permission Rationale Dialog (Android 13+)
+    if (showRationaleNotifDialog) {
+        AlertDialog(
+            onDismissRequest = { showRationaleNotifDialog = false },
+            icon = {
+                Icon(
+                    Icons.Default.NotificationsActive,
+                    contentDescription = null,
+                    tint = SymphonixBlue,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Autorisation des notifications",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = SymphonixDeepBlue
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "SYMPHONIX utilise les notifications Android locales pour :",
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = Color(0xFF1E293B)
+                    )
+                    Text(
+                        text = "• Vous rappeler la clôture de caisse quotidienne avant de quitter votre commerce.\n" +
+                               "• Vous alerter si le solde disponible passe sous votre seuil de sécurité.\n\n" +
+                               "🔒 Confidentialité absolue : Aucune donnée n'est envoyée sur Internet. Vos données financières restent 100% locales et privées.",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 18.sp),
+                        color = GlassTextSecondary
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showRationaleNotifDialog = false
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                            requestNotifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            Toast.makeText(context, "Notifications actives sur cette version d'Android", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = SymphonixBlue)
+                ) {
+                    Text("Continuer & Autoriser", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRationaleNotifDialog = false }) {
+                    Text("Plus tard", color = Color(0xFF64748B))
+                }
+            }
+        )
+    }
+
+    // Sensitive Action PIN Verification Dialog
+    if (showSensitivePinDialog) {
+        SensitiveActionPinDialog(
+            actionTitle = sensitiveActionTitle,
+            actionDescription = sensitiveActionDescription,
+            isDestructive = sensitiveActionIsDestructive,
+            onDismiss = {
+                showSensitivePinDialog = false
+                pendingSensitiveAction = null
+            },
+            onVerified = {
+                showSensitivePinDialog = false
+                val action = pendingSensitiveAction
+                pendingSensitiveAction = null
+                action?.invoke()
             }
         )
     }
